@@ -5,14 +5,17 @@ use serde::{Deserialize, Serialize};
 /// Generic API response wrapper.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
-    pub status: String,
+    pub status: u16,
     pub data: T,
+    #[serde(flatten)]
+    pub extra: serde_json::Value,
 }
 
 /// Error response from the API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorResponse {
-    pub status: String,
+    #[serde(default)]
+    pub status: Option<u16>,
     #[serde(default)]
     pub message: Option<String>,
     #[serde(default)]

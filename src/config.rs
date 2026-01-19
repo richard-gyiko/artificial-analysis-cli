@@ -54,7 +54,13 @@ impl Config {
     }
 
     /// Get the configuration file path.
+    /// Respects AA_CONFIG_DIR environment variable for testing/portability.
     pub fn config_path() -> Result<PathBuf> {
+        // Allow override via environment variable (useful for testing)
+        if let Ok(config_dir) = std::env::var("AA_CONFIG_DIR") {
+            return Ok(PathBuf::from(config_dir).join("config.toml"));
+        }
+
         dirs::config_dir()
             .map(|p| p.join("aa").join("config.toml"))
             .ok_or_else(|| AppError::Config("Could not determine config directory".into()))

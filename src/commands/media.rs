@@ -44,7 +44,7 @@ impl From<&MediaModel> for MediaRow {
                 .map(|r| r.to_string())
                 .unwrap_or_else(|| "-".into()),
             name: model.name.clone(),
-            creator: model.creator.name.clone(),
+            creator: model.creator_name().to_string(),
             elo: model
                 .elo
                 .map(|e| format!("{:.0}", e))
@@ -87,11 +87,18 @@ impl Formattable for MediaRowWithCategories {
 impl From<&MediaModel> for MediaRowWithCategories {
     fn from(model: &MediaModel) -> Self {
         let categories = model
-            .category_breakdown
+            .categories
             .as_ref()
             .map(|cats| {
                 cats.iter()
-                    .filter_map(|(name, score)| score.elo.map(|e| format!("{}:{:.0}", name, e)))
+                    .filter_map(|cat| {
+                        let name = cat
+                            .style_category
+                            .as_deref()
+                            .or(cat.subject_matter_category.as_deref())
+                            .unwrap_or("Unknown");
+                        cat.elo.map(|e| format!("{}:{:.0}", name, e))
+                    })
                     .collect::<Vec<_>>()
                     .join(", ")
             })
@@ -103,7 +110,7 @@ impl From<&MediaModel> for MediaRowWithCategories {
                 .map(|r| r.to_string())
                 .unwrap_or_else(|| "-".into()),
             name: model.name.clone(),
-            creator: model.creator.name.clone(),
+            creator: model.creator_name().to_string(),
             elo: model
                 .elo
                 .map(|e| format!("{:.0}", e))

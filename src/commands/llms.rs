@@ -53,7 +53,7 @@ impl From<&LlmModel> for LlmRow {
     fn from(model: &LlmModel) -> Self {
         Self {
             name: model.display_name().to_string(),
-            creator: model.creator.name.clone(),
+            creator: model.creator_name().to_string(),
             intelligence: model
                 .intelligence()
                 .map(|v| format!("{:.1}", v))
@@ -94,8 +94,12 @@ pub async fn run(
 
     if let Some(creator) = creator_filter {
         models.retain(|m| {
-            m.creator.slug.contains(creator)
-                || m.creator
+            m.model_creator
+                .slug
+                .as_deref()
+                .unwrap_or("")
+                .contains(creator)
+                || m.model_creator
                     .name
                     .to_lowercase()
                     .contains(&creator.to_lowercase())

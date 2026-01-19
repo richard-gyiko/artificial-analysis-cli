@@ -50,10 +50,15 @@ pub struct Cache {
 
 impl Cache {
     /// Create a new cache with default settings.
+    /// Respects AA_CACHE_DIR environment variable for testing/portability.
     pub fn new() -> Result<Self> {
-        let base_dir = dirs::cache_dir()
-            .map(|p| p.join("aa"))
-            .ok_or_else(|| AppError::Cache("Could not determine cache directory".into()))?;
+        let base_dir = if let Ok(cache_dir) = std::env::var("AA_CACHE_DIR") {
+            PathBuf::from(cache_dir)
+        } else {
+            dirs::cache_dir()
+                .map(|p| p.join("aa"))
+                .ok_or_else(|| AppError::Cache("Could not determine cache directory".into()))?
+        };
 
         std::fs::create_dir_all(&base_dir)?;
 
