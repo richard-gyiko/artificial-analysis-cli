@@ -95,3 +95,50 @@ fn test_output_format_flags() {
         .assert()
         .failure();
 }
+
+#[test]
+fn test_query_help() {
+    cmd()
+        .arg("query")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("SQL"))
+        .stdout(predicate::str::contains("--tables"));
+}
+
+#[test]
+fn test_query_tables() {
+    let temp = tempfile::tempdir().unwrap();
+    cmd_with_temp_config(&temp)
+        .arg("query")
+        .arg("--tables")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Available tables"))
+        .stdout(predicate::str::contains("llms"))
+        .stdout(predicate::str::contains("text_to_image"))
+        .stdout(predicate::str::contains("not cached"));
+}
+
+#[test]
+fn test_query_no_sql() {
+    let temp = tempfile::tempdir().unwrap();
+    cmd_with_temp_config(&temp)
+        .arg("query")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("No SQL query provided"));
+}
+
+#[test]
+fn test_query_missing_table() {
+    let temp = tempfile::tempdir().unwrap();
+    cmd_with_temp_config(&temp)
+        .arg("query")
+        .arg("SELECT * FROM llms")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not found"))
+        .stderr(predicate::str::contains("aa llms"));
+}

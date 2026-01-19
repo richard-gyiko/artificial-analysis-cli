@@ -8,6 +8,8 @@ pub mod config;
 pub mod error;
 pub mod models;
 pub mod output;
+pub mod parquet;
+pub mod query;
 
 pub use cli::{Cli, Commands};
 pub use config::Config;

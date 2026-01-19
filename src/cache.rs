@@ -4,7 +4,7 @@ use crate::error::{AppError, Result};
 use chrono::{DateTime, Utc};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 /// Default cache TTL (1 hour).
@@ -66,6 +66,16 @@ impl Cache {
             base_dir,
             ttl: Duration::from_secs(DEFAULT_TTL_SECS),
         })
+    }
+
+    /// Get the cache base directory.
+    pub fn base_dir(&self) -> &Path {
+        &self.base_dir
+    }
+
+    /// Get the path to a Parquet cache file.
+    pub fn parquet_path(&self, name: &str) -> PathBuf {
+        self.base_dir.join(format!("{}.parquet", name))
     }
 
     /// Generate a cache key from endpoint and params.
@@ -136,8 +146,10 @@ impl Cache {
     pub fn clear(&self) -> Result<()> {
         for entry in std::fs::read_dir(&self.base_dir)? {
             let entry = entry?;
-            if entry.path().extension().is_some_and(|e| e == "json") {
-                std::fs::remove_file(entry.path())?;
+            let path = entry.path();
+            let ext = path.extension().and_then(|e| e.to_str());
+            if ext == Some("json") || ext == Some("parquet") {
+                std::fs::remove_file(path)?;
             }
         }
         Ok(())
@@ -150,7 +162,9 @@ impl Cache {
 
         for entry in std::fs::read_dir(&self.base_dir)? {
             let entry = entry?;
-            if entry.path().extension().is_some_and(|e| e == "json") {
+            let path = entry.path();
+            let ext = path.extension().and_then(|e| e.to_str());
+            if ext == Some("json") || ext == Some("parquet") {
                 count += 1;
                 size += entry.metadata()?.len();
             }

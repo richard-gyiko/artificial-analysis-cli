@@ -4,4 +4,5 @@ pub mod cache;
 pub mod llms;
 pub mod media;
 pub mod profile;
+pub mod query;
 pub mod quota;

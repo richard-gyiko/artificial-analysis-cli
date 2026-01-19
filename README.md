@@ -53,6 +53,73 @@ aa text-to-video
 aa image-to-video
 ```
 
+### SQL Queries
+
+Use SQL to filter, sort, and aggregate cached data with full expressiveness:
+
+```bash
+# Best coding models under $5/M output price
+aa query "SELECT name, creator, coding, output_price FROM llms WHERE coding > 40 AND output_price < 5 ORDER BY coding DESC"
+
+# Fastest models with good intelligence
+aa query "SELECT name, intelligence, tps FROM llms WHERE intelligence > 35 AND tps > 100 ORDER BY tps DESC LIMIT 10"
+
+# Compare creators by average intelligence
+aa query "SELECT creator, COUNT(*) as models, ROUND(AVG(intelligence), 1) as avg_intel FROM llms WHERE intelligence IS NOT NULL GROUP BY creator ORDER BY avg_intel DESC"
+
+# Top image generation models
+aa query "SELECT name, creator, elo, rank FROM text_to_image WHERE elo > 1200 ORDER BY elo DESC"
+
+# List available tables and their schemas
+aa query --tables
+```
+
+#### Available Tables
+
+| Table | Source Command |
+|-------|----------------|
+| `llms` | `aa llms` |
+| `text_to_image` | `aa text-to-image` |
+| `image_editing` | `aa image-editing` |
+| `text_to_speech` | `aa text-to-speech` |
+| `text_to_video` | `aa text-to-video` |
+| `image_to_video` | `aa image-to-video` |
+
+#### LLMs Table Columns
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | VARCHAR | Model ID |
+| `name` | VARCHAR | Model name |
+| `slug` | VARCHAR | URL slug |
+| `creator` | VARCHAR | Creator name |
+| `creator_slug` | VARCHAR | Creator slug |
+| `release_date` | VARCHAR | Release date |
+| `intelligence` | DOUBLE | Intelligence index |
+| `coding` | DOUBLE | Coding index |
+| `math` | DOUBLE | Math index |
+| `mmlu_pro` | DOUBLE | MMLU-Pro score |
+| `gpqa` | DOUBLE | GPQA score |
+| `input_price` | DOUBLE | Input price per 1M tokens |
+| `output_price` | DOUBLE | Output price per 1M tokens |
+| `price` | DOUBLE | Blended price (3:1 ratio) |
+| `tps` | DOUBLE | Tokens per second |
+| `latency` | DOUBLE | Time to first token (seconds) |
+
+#### Media Tables Columns
+
+All media tables (`text_to_image`, `image_editing`, etc.) share this schema:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | VARCHAR | Model ID |
+| `name` | VARCHAR | Model name |
+| `slug` | VARCHAR | URL slug |
+| `creator` | VARCHAR | Creator name |
+| `elo` | DOUBLE | ELO score |
+| `rank` | INTEGER | Rank |
+| `release_date` | VARCHAR | Release date |
+
 ### Other Commands
 
 ```bash

@@ -5,6 +5,7 @@ pub mod endpoints;
 use crate::cache::{Cache, QuotaInfo};
 use crate::error::{AppError, Result};
 use crate::models::{ApiResponse, LlmModel, MediaModel};
+use crate::parquet;
 use chrono::Utc;
 use endpoints::{
     API_BASE, IMAGE_EDITING, IMAGE_TO_VIDEO, LLM_MODELS, TEXT_TO_IMAGE, TEXT_TO_SPEECH,
@@ -140,6 +141,13 @@ impl Client {
     ) -> Result<(Vec<LlmModel>, Option<QuotaInfo>)> {
         let (response, quota): (ApiResponse<Vec<LlmModel>>, _) =
             self.request(LLM_MODELS, &[], refresh).await?;
+
+        // Write Parquet file for SQL queries
+        let parquet_path = self.cache.parquet_path("llms");
+        if let Err(e) = parquet::write_llms_parquet(&response.data, &parquet_path) {
+            eprintln!("Warning: Failed to write Parquet cache: {}", e);
+        }
+
         Ok((response.data, quota))
     }
 
@@ -147,10 +155,18 @@ impl Client {
     async fn get_media_models(
         &self,
         endpoint: &str,
+        parquet_name: &str,
         refresh: bool,
     ) -> Result<(Vec<MediaModel>, Option<QuotaInfo>)> {
         let (response, quota): (ApiResponse<Vec<MediaModel>>, _) =
             self.request(endpoint, &[], refresh).await?;
+
+        // Write Parquet file for SQL queries
+        let parquet_path = self.cache.parquet_path(parquet_name);
+        if let Err(e) = parquet::write_media_parquet(&response.data, &parquet_path) {
+            eprintln!("Warning: Failed to write Parquet cache: {}", e);
+        }
+
         Ok((response.data, quota))
     }
 
@@ -159,7 +175,8 @@ impl Client {
         &self,
         refresh: bool,
     ) -> Result<(Vec<MediaModel>, Option<QuotaInfo>)> {
-        self.get_media_models(TEXT_TO_IMAGE, refresh).await
+        self.get_media_models(TEXT_TO_IMAGE, "text_to_image", refresh)
+            .await
     }
 
     /// Fetch image-editing models.
@@ -167,7 +184,8 @@ impl Client {
         &self,
         refresh: bool,
     ) -> Result<(Vec<MediaModel>, Option<QuotaInfo>)> {
-        self.get_media_models(IMAGE_EDITING, refresh).await
+        self.get_media_models(IMAGE_EDITING, "image_editing", refresh)
+            .await
     }
 
     /// Fetch text-to-speech models.
@@ -175,7 +193,8 @@ impl Client {
         &self,
         refresh: bool,
     ) -> Result<(Vec<MediaModel>, Option<QuotaInfo>)> {
-        self.get_media_models(TEXT_TO_SPEECH, refresh).await
+        self.get_media_models(TEXT_TO_SPEECH, "text_to_speech", refresh)
+            .await
     }
 
     /// Fetch text-to-video models.
@@ -183,7 +202,8 @@ impl Client {
         &self,
         refresh: bool,
     ) -> Result<(Vec<MediaModel>, Option<QuotaInfo>)> {
-        self.get_media_models(TEXT_TO_VIDEO, refresh).await
+        self.get_media_models(TEXT_TO_VIDEO, "text_to_video", refresh)
+            .await
     }
 
     /// Fetch image-to-video models.
@@ -191,7 +211,8 @@ impl Client {
         &self,
         refresh: bool,
     ) -> Result<(Vec<MediaModel>, Option<QuotaInfo>)> {
-        self.get_media_models(IMAGE_TO_VIDEO, refresh).await
+        self.get_media_models(IMAGE_TO_VIDEO, "image_to_video", refresh)
+            .await
     }
 
     /// Get cached quota info.

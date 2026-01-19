@@ -100,6 +100,16 @@ pub enum Commands {
         categories: bool,
     },
 
+    /// Execute SQL queries against cached data
+    Query {
+        /// SQL query to execute (e.g., "SELECT * FROM llms WHERE intelligence > 40")
+        sql: Option<String>,
+
+        /// List available tables and their schemas
+        #[arg(long)]
+        tables: bool,
+    },
+
     /// Check API quota status
     Quota,
 

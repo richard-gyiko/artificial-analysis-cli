@@ -40,6 +40,9 @@ async fn run() -> Result<()> {
                 CacheCommands::Status => commands::cache::status(),
             };
         }
+        Commands::Query { sql, tables } => {
+            return commands::query::run(sql.as_deref(), *tables, format);
+        }
         _ => {}
     }
 
@@ -56,13 +59,13 @@ async fn run() -> Result<()> {
     let client = Client::new(api_key, profile_name)?;
 
     // Handle commands that need API access
-    let quota = match &cli.command {
+    let (quota, show_hint) = match &cli.command {
         Commands::Llms {
             model,
             creator,
             sort,
         } => {
-            commands::llms::run(
+            let q = commands::llms::run(
                 &client,
                 cli.refresh,
                 format,
@@ -70,35 +73,55 @@ async fn run() -> Result<()> {
                 creator.as_deref(),
                 sort.as_deref(),
             )
-            .await?
+            .await?;
+            (q, Some("llms"))
         }
         Commands::TextToImage { categories } => {
-            commands::media::run_text_to_image(&client, cli.refresh, format, *categories).await?
+            let q = commands::media::run_text_to_image(&client, cli.refresh, format, *categories)
+                .await?;
+            (q, Some("text_to_image"))
         }
         Commands::ImageEditing => {
-            commands::media::run_image_editing(&client, cli.refresh, format).await?
+            let q = commands::media::run_image_editing(&client, cli.refresh, format).await?;
+            (q, Some("image_editing"))
         }
         Commands::TextToSpeech => {
-            commands::media::run_text_to_speech(&client, cli.refresh, format).await?
+            let q = commands::media::run_text_to_speech(&client, cli.refresh, format).await?;
+            (q, Some("text_to_speech"))
         }
         Commands::TextToVideo { categories } => {
-            commands::media::run_text_to_video(&client, cli.refresh, format, *categories).await?
+            let q = commands::media::run_text_to_video(&client, cli.refresh, format, *categories)
+                .await?;
+            (q, Some("text_to_video"))
         }
         Commands::ImageToVideo { categories } => {
-            commands::media::run_image_to_video(&client, cli.refresh, format, *categories).await?
+            let q = commands::media::run_image_to_video(&client, cli.refresh, format, *categories)
+                .await?;
+            (q, Some("image_to_video"))
         }
         Commands::Quota => {
             commands::quota::run(&client)?;
-            None
+            (None, None)
         }
-        // Profile and Cache are handled above
-        Commands::Profile { .. } | Commands::Cache { .. } => unreachable!(),
+        // Profile, Cache, and Query are handled above
+        Commands::Profile { .. } | Commands::Cache { .. } | Commands::Query { .. } => {
+            unreachable!()
+        }
     };
 
     // Print attribution (required by API terms) unless --quiet
     if !cli.quiet {
         println!();
         println!("Data provided by Artificial Analysis (https://artificialanalysis.ai)");
+
+        // Show hint about aa query for advanced filtering
+        if let Some(table) = show_hint {
+            println!();
+            println!(
+                "Tip: Use 'aa query \"SELECT * FROM {} WHERE ...\"' for advanced filtering",
+                table
+            );
+        }
     }
 
     // Show low quota warning if applicable

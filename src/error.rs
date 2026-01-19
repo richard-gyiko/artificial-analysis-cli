@@ -34,6 +34,9 @@ pub enum AppError {
     #[error("Cache error: {0}")]
     Cache(String),
 
+    #[error("{0}")]
+    Query(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
