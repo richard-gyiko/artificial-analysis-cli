@@ -189,7 +189,7 @@ aa profile default work
 
 ## Agent Skill
 
-This repo includes a `which-llm` [Agent Skill](https://agentskills.io) that helps AI agents select the right model for a task.
+The [`which-llm`](https://github.com/richard-gyiko/which-llm) skill helps AI agents select the right model for a task.
 
 Instead of manually querying benchmarks, an agent can load this skill to:
 
@@ -197,14 +197,12 @@ Instead of manually querying benchmarks, an agent can load this skill to:
 2. **Derive requirements** (minimum intelligence/coding scores needed)
 3. **Query and recommend** models that fit your constraints (budget, speed, latency)
 
-Copy the `skills/which-llm` directory to your agent's skills folder, or reference it directly if your agent supports remote skills.
-
 ```bash
-# Install to OpenCode skills folder
-npx degit richard-gyiko/artificial-analysis-cli/skills/which-llm ~/.config/opencode/skill/which-llm
+# Install to your skills folder
+npx degit richard-gyiko/which-llm/skills/which-llm skills/which-llm
 ```
 
-See [`skills/which-llm/SKILL.md`](skills/which-llm/SKILL.md) for the full skill specification.
+See the [which-llm repository](https://github.com/richard-gyiko/which-llm) for full documentation.
 
 ## Attribution
 
