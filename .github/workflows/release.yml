@@ -5,8 +5,8 @@ on:
     tags:
       - 'v*'
 
-env:
-  CARGO_TERM_COLOR: always
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -15,22 +15,18 @@ jobs:
     strategy:
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            binary: aa
-            archive: tar.gz
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            binary: aa
-            archive: tar.gz
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            binary: aa
-            archive: tar.gz
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            binary: aa.exe
-            archive: zip
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact: aa
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: aa
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: aa
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: aa.exe
 
     steps:
       - uses: actions/checkout@v4
@@ -40,40 +36,27 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install musl tools (Linux)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
 
-      - name: Build
+      - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Package (Unix)
-        if: matrix.archive == 'tar.gz'
-        run: |
-          cd target/${{ matrix.target }}/release
-          tar -czvf ../../../aa-${{ matrix.target }}.tar.gz ${{ matrix.binary }}
-
-      - name: Package (Windows)
-        if: matrix.archive == 'zip'
-        shell: pwsh
-        run: |
-          cd target/${{ matrix.target }}/release
-          Compress-Archive -Path ${{ matrix.binary }} -DestinationPath ../../../aa-${{ matrix.target }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: aa-${{ matrix.target }}
-          path: aa-${{ matrix.target }}.${{ matrix.archive }}
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact }}
 
   release:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    outputs:
-      version: ${{ steps.version.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -87,43 +70,37 @@ jobs:
         with:
           path: artifacts
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: artifacts/**/*
-
-  scoop:
-    name: Update Scoop Manifest
-    needs: release
-    runs-on: ubuntu-latest
-    if: ${{ vars.SCOOP_BUCKET_REPO != '' }}
-
-    steps:
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: aa-x86_64-pc-windows-msvc
-          path: artifacts
-
-      - name: Calculate SHA256
-        id: hash
+      - name: Create archives
         run: |
-          sha256=$(sha256sum artifacts/aa-x86_64-pc-windows-msvc.zip | cut -d ' ' -f 1)
-          echo "sha256=$sha256" >> $GITHUB_OUTPUT
+          mkdir -p release
+          cd artifacts
+          for dir in */; do
+            target="${dir%/}"
+            if [[ "$target" == *"windows"* ]]; then
+              zip -j "../release/${target}.zip" "$dir"*
+            else
+              tar -czvf "../release/${target}.tar.gz" -C "$dir" .
+            fi
+          done
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd release
+          sha256sum * > SHA256SUMS
 
       - name: Generate Scoop manifest
         run: |
-          cat > aa.json << EOF
+          WINDOWS_HASH=$(grep "aa-x86_64-pc-windows-msvc.zip" release/SHA256SUMS | cut -d ' ' -f 1)
+          cat > release/aa.json << EOF
           {
-              "version": "${{ needs.release.outputs.version }}",
+              "version": "${{ steps.version.outputs.version }}",
               "description": "CLI for querying AI model benchmarks from Artificial Analysis",
               "homepage": "https://github.com/richard-gyiko/artificial-analysis-cli",
               "license": "MIT",
               "architecture": {
                   "64bit": {
-                      "url": "https://github.com/richard-gyiko/artificial-analysis-cli/releases/download/v${{ needs.release.outputs.version }}/aa-x86_64-pc-windows-msvc.zip",
-                      "hash": "${{ steps.hash.outputs.sha256 }}"
+                      "url": "https://github.com/richard-gyiko/artificial-analysis-cli/releases/download/v${{ steps.version.outputs.version }}/aa-x86_64-pc-windows-msvc.zip",
+                      "hash": "${WINDOWS_HASH}"
                   }
               },
               "bin": "aa.exe",
@@ -138,14 +115,8 @@ jobs:
           }
           EOF
 
-      - name: Push to Scoop bucket
-        uses: dmnemec/copy_file_to_another_repo_action@main
-        env:
-          API_TOKEN_GITHUB: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          source_file: 'aa.json'
-          destination_repo: ${{ vars.SCOOP_BUCKET_REPO }}
-          destination_folder: 'bucket'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
-          user_name: 'github-actions[bot]'
-          commit_message: 'Update aa to v${{ needs.release.outputs.version }}'
+          files: release/*
+          generate_release_notes: true
