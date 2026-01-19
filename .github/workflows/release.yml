@@ -61,10 +61,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get version
-        id: version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -88,35 +84,8 @@ jobs:
           cd release
           sha256sum * > SHA256SUMS
 
-      - name: Generate Scoop manifest
-        run: |
-          WINDOWS_HASH=$(grep "aa-x86_64-pc-windows-msvc.zip" release/SHA256SUMS | cut -d ' ' -f 1)
-          cat > release/aa.json << EOF
-          {
-              "version": "${{ steps.version.outputs.version }}",
-              "description": "CLI for querying AI model benchmarks from Artificial Analysis",
-              "homepage": "https://github.com/richard-gyiko/artificial-analysis-cli",
-              "license": "MIT",
-              "architecture": {
-                  "64bit": {
-                      "url": "https://github.com/richard-gyiko/artificial-analysis-cli/releases/download/v${{ steps.version.outputs.version }}/aa-x86_64-pc-windows-msvc.zip",
-                      "hash": "${WINDOWS_HASH}"
-                  }
-              },
-              "bin": "aa.exe",
-              "checkver": "github",
-              "autoupdate": {
-                  "architecture": {
-                      "64bit": {
-                          "url": "https://github.com/richard-gyiko/artificial-analysis-cli/releases/download/v\$version/aa-x86_64-pc-windows-msvc.zip"
-                      }
-                  }
-              }
-          }
-          EOF
-
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v1
         with:
           files: release/*
           generate_release_notes: true
