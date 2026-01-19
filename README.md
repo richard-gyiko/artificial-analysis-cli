@@ -199,6 +199,11 @@ Instead of manually querying benchmarks, an agent can load this skill to:
 
 Copy the `skills/which-llm` directory to your agent's skills folder, or reference it directly if your agent supports remote skills.
 
+```bash
+# Install to OpenCode skills folder
+npx degit richard-gyiko/artificial-analysis-cli/skills/which-llm ~/.config/opencode/skill/which-llm
+```
+
 See [`skills/which-llm/SKILL.md`](skills/which-llm/SKILL.md) for the full skill specification.
 
 ## Attribution
