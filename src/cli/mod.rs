@@ -1,0 +1,164 @@
+//! CLI argument definitions.
+
+use crate::output::OutputFormat;
+use clap::{Parser, Subcommand};
+
+/// Artificial Analysis CLI - Query AI model benchmarks from the terminal.
+#[derive(Parser, Debug)]
+#[command(name = "aa", version, about, long_about = None)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+
+    /// Use a specific profile
+    #[arg(long, short = 'p', global = true)]
+    pub profile: Option<String>,
+
+    /// Output as JSON
+    #[arg(long, global = true, conflicts_with_all = ["csv", "table", "plain"])]
+    pub json: bool,
+
+    /// Output as CSV
+    #[arg(long, global = true, conflicts_with_all = ["json", "table", "plain"])]
+    pub csv: bool,
+
+    /// Output as ASCII table
+    #[arg(long, global = true, conflicts_with_all = ["json", "csv", "plain"])]
+    pub table: bool,
+
+    /// Output as plain text (tab-separated)
+    #[arg(long, global = true, conflicts_with_all = ["json", "csv", "table"])]
+    pub plain: bool,
+
+    /// Bypass cache and fetch fresh data
+    #[arg(long, global = true)]
+    pub refresh: bool,
+
+    /// Suppress attribution notice (for scripting)
+    #[arg(long, short = 'q', global = true)]
+    pub quiet: bool,
+}
+
+impl Cli {
+    /// Get the selected output format.
+    pub fn output_format(&self) -> OutputFormat {
+        if self.json {
+            OutputFormat::Json
+        } else if self.csv {
+            OutputFormat::Csv
+        } else if self.table {
+            OutputFormat::Table
+        } else if self.plain {
+            OutputFormat::Plain
+        } else {
+            OutputFormat::Markdown
+        }
+    }
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    /// List and query LLM models
+    Llms {
+        /// Filter by model slug
+        #[arg(long, short = 'm')]
+        model: Option<String>,
+
+        /// Filter by creator slug
+        #[arg(long, short = 'c')]
+        creator: Option<String>,
+
+        /// Sort by field (intelligence, price, speed)
+        #[arg(long, short = 's')]
+        sort: Option<String>,
+    },
+
+    /// List text-to-image model rankings
+    TextToImage {
+        /// Include category breakdown
+        #[arg(long)]
+        categories: bool,
+    },
+
+    /// List image editing model rankings
+    ImageEditing,
+
+    /// List text-to-speech model rankings
+    TextToSpeech,
+
+    /// List text-to-video model rankings
+    TextToVideo {
+        /// Include category breakdown
+        #[arg(long)]
+        categories: bool,
+    },
+
+    /// List image-to-video model rankings
+    ImageToVideo {
+        /// Include category breakdown
+        #[arg(long)]
+        categories: bool,
+    },
+
+    /// Execute SQL queries against cached data
+    Query {
+        /// SQL query to execute (e.g., "SELECT * FROM llms WHERE intelligence > 40")
+        sql: Option<String>,
+
+        /// List available tables and their schemas
+        #[arg(long)]
+        tables: bool,
+    },
+
+    /// Check API quota status
+    Quota,
+
+    /// Manage response cache
+    Cache {
+        #[command(subcommand)]
+        command: CacheCommands,
+    },
+
+    /// Manage configuration profiles
+    Profile {
+        #[command(subcommand)]
+        command: ProfileCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum CacheCommands {
+    /// Clear all cached data
+    Clear,
+    /// Show cache status
+    Status,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ProfileCommands {
+    /// Create a new profile
+    Create {
+        /// Profile name
+        name: String,
+        /// API key (will prompt if not provided)
+        #[arg(long)]
+        api_key: Option<String>,
+    },
+    /// List all profiles
+    List,
+    /// Set the default profile
+    Default {
+        /// Profile name to set as default
+        name: String,
+    },
+    /// Delete a profile
+    Delete {
+        /// Profile name to delete
+        name: String,
+    },
+    /// Show profile details
+    Show {
+        /// Profile name (uses default if not specified)
+        name: Option<String>,
+    },
+}

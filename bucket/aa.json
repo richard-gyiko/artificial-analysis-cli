@@ -1,0 +1,23 @@
+{
+    "version": "0.1.0",
+    "description": "CLI for querying AI model benchmarks from Artificial Analysis",
+    "homepage": "https://github.com/richard-gyiko/artificial-analysis-cli",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/richard-gyiko/artificial-analysis-cli/releases/download/v0.1.0/aa-x86_64-pc-windows-msvc.zip",
+            "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+    },
+    "bin": "aa.exe",
+    "checkver": {
+        "github": "https://github.com/richard-gyiko/artificial-analysis-cli"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/richard-gyiko/artificial-analysis-cli/releases/download/v$version/aa-x86_64-pc-windows-msvc.zip"
+            }
+        }
+    }
+}
