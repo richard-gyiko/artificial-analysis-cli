@@ -4,14 +4,21 @@ A command-line interface for querying AI model benchmarks from [Artificial Analy
 
 ## Installation
 
+### macOS / Linux (Homebrew)
+
+```bash
+brew tap richard-gyiko/tap
+brew install aa
+```
+
 ### Windows (Scoop)
 
 ```powershell
-scoop bucket add aa https://github.com/richard-gyiko/scoop-aa
+scoop bucket add richard-gyiko https://github.com/richard-gyiko/scoop-bucket
 scoop install aa
 ```
 
-### macOS / Linux
+### Manual Download
 
 Download the latest release from [GitHub Releases](https://github.com/richard-gyiko/artificial-analysis-cli/releases):
 
