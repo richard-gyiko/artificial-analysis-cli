@@ -4,6 +4,7 @@
 
 use crate::error::{AppError, Result};
 use crate::models::{LlmModel, MediaModel};
+use crate::schema;
 use duckdb::{params, Connection};
 use std::path::Path;
 
@@ -85,62 +86,53 @@ pub fn write_llms_parquet(models: &[LlmModel], path: &Path) -> Result<()> {
     let conn = Connection::open_in_memory()
         .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
 
-    // Create table with flattened schema
-    conn.execute(
-        "CREATE TABLE llms (
-            id VARCHAR NOT NULL,
-            name VARCHAR NOT NULL,
-            slug VARCHAR NOT NULL,
-            creator VARCHAR NOT NULL,
-            creator_slug VARCHAR,
-            release_date VARCHAR,
-            intelligence DOUBLE,
-            coding DOUBLE,
-            math DOUBLE,
-            mmlu_pro DOUBLE,
-            gpqa DOUBLE,
-            input_price DOUBLE,
-            output_price DOUBLE,
-            price DOUBLE,
-            tps DOUBLE,
-            latency DOUBLE
-        )",
-        [],
-    )
-    .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
-
-    // Insert rows
-    let mut stmt = conn
-        .prepare("INSERT INTO llms VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    // Create table using centralized schema
+    conn.execute(&schema::LLMS.create_table_sql(), [])
         .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
 
-    for model in models {
-        let row = LlmRow::from(model);
-        stmt.execute(params![
-            row.id,
-            row.name,
-            row.slug,
-            row.creator,
-            row.creator_slug,
-            row.release_date,
-            row.intelligence,
-            row.coding,
-            row.math,
-            row.mmlu_pro,
-            row.gpqa,
-            row.input_price,
-            row.output_price,
-            row.price,
-            row.tps,
-            row.latency,
-        ])
-        .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
+    // Use Appender for bulk insert performance
+    {
+        let mut appender = conn
+            .appender(schema::LLMS.name)
+            .map_err(|e| AppError::Cache(format!("DuckDB appender error: {}", e)))?;
+
+        for model in models {
+            let row = LlmRow::from(model);
+            appender
+                .append_row(params![
+                    row.id,
+                    row.name,
+                    row.slug,
+                    row.creator,
+                    row.creator_slug,
+                    row.release_date,
+                    row.intelligence,
+                    row.coding,
+                    row.math,
+                    row.mmlu_pro,
+                    row.gpqa,
+                    row.input_price,
+                    row.output_price,
+                    row.price,
+                    row.tps,
+                    row.latency,
+                ])
+                .map_err(|e| AppError::Cache(format!("DuckDB append error: {}", e)))?;
+        }
+        // Appender is flushed on drop
     }
 
     // Export to Parquet
     let path_str = path.to_string_lossy();
-    conn.execute(&format!("COPY llms TO '{}' (FORMAT PARQUET)", path_str), [])
-        .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
+    conn.execute(
+        &format!(
+            "COPY {} TO '{}' (FORMAT PARQUET)",
+            schema::LLMS.name,
+            path_str
+        ),
+        [],
+    )
+    .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
 
     Ok(())
 }
@@ -150,7 +142,7 @@ pub fn write_media_parquet(models: &[MediaModel], path: &Path) -> Result<()> {
     let conn = Connection::open_in_memory()
         .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
 
-    // Create table with flattened schema
+    // Create table with flattened schema (using "media" as temp table name)
     conn.execute(
         "CREATE TABLE media (
             id VARCHAR NOT NULL,
@@ -165,23 +157,27 @@ pub fn write_media_parquet(models: &[MediaModel], path: &Path) -> Result<()> {
     )
     .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
 
-    // Insert rows
-    let mut stmt = conn
-        .prepare("INSERT INTO media VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
+    // Use Appender for bulk insert performance
+    {
+        let mut appender = conn
+            .appender("media")
+            .map_err(|e| AppError::Cache(format!("DuckDB appender error: {}", e)))?;
 
-    for model in models {
-        let row = MediaRow::from(model);
-        stmt.execute(params![
-            row.id,
-            row.name,
-            row.slug,
-            row.creator,
-            row.elo,
-            row.rank,
-            row.release_date,
-        ])
-        .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
+        for model in models {
+            let row = MediaRow::from(model);
+            appender
+                .append_row(params![
+                    row.id,
+                    row.name,
+                    row.slug,
+                    row.creator,
+                    row.elo,
+                    row.rank,
+                    row.release_date,
+                ])
+                .map_err(|e| AppError::Cache(format!("DuckDB append error: {}", e)))?;
+        }
+        // Appender is flushed on drop
     }
 
     // Export to Parquet

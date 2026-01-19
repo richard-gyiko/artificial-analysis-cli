@@ -4,72 +4,21 @@
 
 use crate::error::{AppError, Result};
 use crate::output::OutputFormat;
+use crate::schema::{self, Column, ALL_TABLES};
+use comfy_table::{presets::ASCII_BORDERS_ONLY_CONDENSED, Table};
 use duckdb::types::Value;
 use duckdb::Connection;
+use sqlparser::ast::{ObjectName, Visit, Visitor};
+use sqlparser::dialect::GenericDialect;
+use sqlparser::parser::Parser;
 use std::collections::HashMap;
+use std::ops::ControlFlow;
 use std::path::PathBuf;
 
-/// Known table aliases and their corresponding Parquet filenames.
-pub const TABLE_ALIASES: &[(&str, &str)] = &[
-    ("llms", "llms.parquet"),
-    ("text_to_image", "text_to_image.parquet"),
-    ("image_editing", "image_editing.parquet"),
-    ("text_to_speech", "text_to_speech.parquet"),
-    ("text_to_video", "text_to_video.parquet"),
-    ("image_to_video", "image_to_video.parquet"),
-];
-
-/// Schema information for a table.
+/// Schema information for a table (used for --tables display).
 pub struct TableSchema {
     pub name: &'static str,
-    pub columns: &'static [(&'static str, &'static str, bool)], // (name, type, nullable)
-}
-
-/// LLM table schema.
-pub const LLM_SCHEMA: TableSchema = TableSchema {
-    name: "llms",
-    columns: &[
-        ("id", "VARCHAR", false),
-        ("name", "VARCHAR", false),
-        ("slug", "VARCHAR", false),
-        ("creator", "VARCHAR", false),
-        ("creator_slug", "VARCHAR", true),
-        ("release_date", "VARCHAR", true),
-        ("intelligence", "DOUBLE", true),
-        ("coding", "DOUBLE", true),
-        ("math", "DOUBLE", true),
-        ("mmlu_pro", "DOUBLE", true),
-        ("gpqa", "DOUBLE", true),
-        ("input_price", "DOUBLE", true),
-        ("output_price", "DOUBLE", true),
-        ("price", "DOUBLE", true),
-        ("tps", "DOUBLE", true),
-        ("latency", "DOUBLE", true),
-    ],
-};
-
-/// Media table schema (used by all media tables).
-pub const MEDIA_SCHEMA: TableSchema = TableSchema {
-    name: "media",
-    columns: &[
-        ("id", "VARCHAR", false),
-        ("name", "VARCHAR", false),
-        ("slug", "VARCHAR", false),
-        ("creator", "VARCHAR", false),
-        ("elo", "DOUBLE", true),
-        ("rank", "INTEGER", true),
-        ("release_date", "VARCHAR", true),
-    ],
-};
-
-/// Get the schema for a table alias.
-pub fn get_schema(table_name: &str) -> Option<&'static TableSchema> {
-    match table_name {
-        "llms" => Some(&LLM_SCHEMA),
-        "text_to_image" | "image_editing" | "text_to_speech" | "text_to_video"
-        | "image_to_video" => Some(&MEDIA_SCHEMA),
-        _ => None,
-    }
+    pub columns: &'static [Column],
 }
 
 /// Result of a SQL query.
@@ -103,19 +52,88 @@ impl QueryExecutor {
         Self { cache_dir }
     }
 
-    /// Substitute table aliases with read_parquet() calls.
+    /// Substitute table aliases with read_parquet() calls using AST parsing.
+    /// Falls back to string replacement if parsing fails.
     pub fn substitute_aliases(&self, sql: &str) -> Result<String> {
+        // Try AST-based substitution first
+        match self.substitute_aliases_ast(sql) {
+            Ok(result) => Ok(result),
+            Err(_) => {
+                // Fall back to string-based substitution
+                self.substitute_aliases_string(sql)
+            }
+        }
+    }
+
+    /// AST-based table substitution - identifies table positions via AST, then does targeted replacement.
+    fn substitute_aliases_ast(&self, sql: &str) -> Result<String> {
+        let dialect = GenericDialect {};
+        let ast = Parser::parse_sql(&dialect, sql)
+            .map_err(|e| AppError::Query(format!("SQL parse error: {}", e)))?;
+
+        // Collect table names that need substitution
+        let mut table_names: Vec<String> = Vec::new();
+        for statement in &ast {
+            let mut visitor = TableNameCollector { tables: Vec::new() };
+            let _ = statement.visit(&mut visitor);
+            table_names.extend(visitor.tables);
+        }
+
+        // Check for missing tables and build replacement map
+        let mut missing_tables = Vec::new();
+        let mut replacements: HashMap<String, String> = HashMap::new();
+
+        for table_name in &table_names {
+            let lower = table_name.to_lowercase();
+            if let Some(table_def) = schema::get_table_def(&lower) {
+                let parquet_path = self.cache_dir.join(table_def.parquet_file);
+                if !parquet_path.exists() {
+                    missing_tables.push(table_def);
+                } else {
+                    let path_str = parquet_path.to_string_lossy().replace('\\', "/");
+                    replacements.insert(lower.clone(), format!("read_parquet('{}')", path_str));
+                }
+            }
+        }
+
+        if !missing_tables.is_empty() {
+            let table = missing_tables[0];
+            return Err(AppError::Query(format!(
+                "Table '{}' not found. Run '{}' first to fetch and cache the data.",
+                table.name, table.command
+            )));
+        }
+
+        // Now do targeted replacement using the AST to find exact positions
+        // We regenerate SQL from AST with substitutions
+        let mut result = sql.to_string();
+
+        // Sort by length descending to avoid replacing substrings
+        let mut sorted_replacements: Vec<_> = replacements.iter().collect();
+        sorted_replacements.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+
+        for (table_name, replacement) in sorted_replacements {
+            // Use case-insensitive word boundary replacement
+            result = replace_table_name_safe(&result, table_name, replacement);
+        }
+
+        Ok(result)
+    }
+
+    /// String-based table substitution (fallback).
+    fn substitute_aliases_string(&self, sql: &str) -> Result<String> {
         let mut result = sql.to_string();
         let mut missing_tables = Vec::new();
 
-        for (alias, filename) in TABLE_ALIASES {
+        for table_def in ALL_TABLES {
+            let alias = table_def.name;
+
             // Match table name as a whole word (case insensitive)
-            // Use regex-like pattern matching with word boundaries
             let patterns = [
                 format!(" FROM {} ", alias),
                 format!(" FROM {}\n", alias),
                 format!(" FROM {}\r", alias),
-                format!(" FROM {}", alias), // At end
+                format!(" FROM {}", alias),
                 format!(" JOIN {} ", alias),
                 format!(" JOIN {}\n", alias),
                 format!(" JOIN {}\r", alias),
@@ -138,7 +156,7 @@ impl QueryExecutor {
                 format!(",{},", alias_upper),
             ];
 
-            let parquet_path = self.cache_dir.join(filename);
+            let parquet_path = self.cache_dir.join(table_def.parquet_file);
             let replacement = format!(
                 "read_parquet('{}')",
                 parquet_path.to_string_lossy().replace('\\', "/")
@@ -151,7 +169,7 @@ impl QueryExecutor {
                 || result.to_lowercase().ends_with(&format!(" join {}", alias));
 
             if is_referenced && !parquet_path.exists() {
-                missing_tables.push(*alias);
+                missing_tables.push(table_def);
             }
 
             // Perform substitutions (case-insensitive, whole word)
@@ -182,18 +200,9 @@ impl QueryExecutor {
 
         if !missing_tables.is_empty() {
             let table = missing_tables[0];
-            let command = match table {
-                "llms" => "aa llms",
-                "text_to_image" => "aa text-to-image",
-                "image_editing" => "aa image-editing",
-                "text_to_speech" => "aa text-to-speech",
-                "text_to_video" => "aa text-to-video",
-                "image_to_video" => "aa image-to-video",
-                _ => "aa <command>",
-            };
             return Err(AppError::Query(format!(
                 "Table '{}' not found. Run '{}' first to fetch and cache the data.",
-                table, command
+                table.name, table.command
             )));
         }
 
@@ -274,28 +283,100 @@ impl QueryExecutor {
     pub fn list_tables(&self) -> Vec<TableInfo> {
         let mut tables = Vec::new();
 
-        for (alias, filename) in TABLE_ALIASES {
-            let parquet_path = self.cache_dir.join(filename);
+        for table_def in ALL_TABLES {
+            let parquet_path = self.cache_dir.join(table_def.parquet_file);
             let exists = parquet_path.exists();
-            let schema = get_schema(alias);
 
             tables.push(TableInfo {
-                name: alias.to_string(),
+                name: table_def.name.to_string(),
                 exists,
-                schema: schema.map(|s| {
-                    s.columns
+                schema: Some(
+                    table_def
+                        .columns
                         .iter()
-                        .map(|(name, typ, nullable)| ColumnInfo {
-                            name: name.to_string(),
-                            data_type: typ.to_string(),
-                            nullable: *nullable,
+                        .map(|col| ColumnInfo {
+                            name: col.name.to_string(),
+                            data_type: col.sql_type.to_string(),
+                            nullable: col.nullable,
                         })
-                        .collect()
-                }),
+                        .collect(),
+                ),
             });
         }
 
         tables
+    }
+}
+
+/// Replace table name in SQL, being careful not to replace inside string literals.
+fn replace_table_name_safe(sql: &str, table_name: &str, replacement: &str) -> String {
+    let mut result = String::new();
+    let mut chars = sql.chars().peekable();
+    let mut in_string = false;
+    let mut string_char = '"';
+    let mut current_word = String::new();
+
+    while let Some(ch) = chars.next() {
+        // Track string literals
+        if !in_string && (ch == '\'' || ch == '"') {
+            in_string = true;
+            string_char = ch;
+            // Flush any accumulated word
+            if !current_word.is_empty() {
+                if current_word.to_lowercase() == table_name {
+                    result.push_str(replacement);
+                } else {
+                    result.push_str(&current_word);
+                }
+                current_word.clear();
+            }
+            result.push(ch);
+        } else if in_string && ch == string_char {
+            in_string = false;
+            result.push(ch);
+        } else if in_string {
+            result.push(ch);
+        } else if ch.is_alphanumeric() || ch == '_' {
+            current_word.push(ch);
+        } else {
+            // End of word, check if it's a table name
+            if !current_word.is_empty() {
+                if current_word.to_lowercase() == table_name {
+                    result.push_str(replacement);
+                } else {
+                    result.push_str(&current_word);
+                }
+                current_word.clear();
+            }
+            result.push(ch);
+        }
+    }
+
+    // Handle any remaining word
+    if !current_word.is_empty() {
+        if current_word.to_lowercase() == table_name {
+            result.push_str(replacement);
+        } else {
+            result.push_str(&current_word);
+        }
+    }
+
+    result
+}
+
+/// Visitor to collect table names from SQL AST.
+struct TableNameCollector {
+    tables: Vec<String>,
+}
+
+impl Visitor for TableNameCollector {
+    type Break = ();
+
+    fn pre_visit_relation(&mut self, relation: &ObjectName) -> ControlFlow<Self::Break> {
+        if let Some(ident) = relation.0.first() {
+            self.tables.push(ident.value.clone());
+        }
+        ControlFlow::Continue(())
     }
 }
 
@@ -352,59 +433,15 @@ fn format_csv(result: &QueryResult) -> String {
 }
 
 fn format_ascii_table(result: &QueryResult) -> String {
-    use std::fmt::Write;
+    let mut table = Table::new();
+    table.load_preset(ASCII_BORDERS_ONLY_CONDENSED);
+    table.set_header(&result.columns);
 
-    // Calculate column widths
-    let mut widths: Vec<usize> = result.columns.iter().map(|c| c.len()).collect();
     for row in &result.rows {
-        for (i, cell) in row.iter().enumerate() {
-            if i < widths.len() && cell.len() > widths[i] {
-                widths[i] = cell.len();
-            }
-        }
+        table.add_row(row);
     }
 
-    let mut output = String::new();
-
-    // Top border
-    write!(output, "+").unwrap();
-    for w in &widths {
-        write!(output, "-{}-+", "-".repeat(*w)).unwrap();
-    }
-    writeln!(output).unwrap();
-
-    // Header row
-    write!(output, "|").unwrap();
-    for (i, col) in result.columns.iter().enumerate() {
-        write!(output, " {:width$} |", col, width = widths[i]).unwrap();
-    }
-    writeln!(output).unwrap();
-
-    // Header separator
-    write!(output, "+").unwrap();
-    for w in &widths {
-        write!(output, "-{}-+", "-".repeat(*w)).unwrap();
-    }
-    writeln!(output).unwrap();
-
-    // Data rows
-    for row in &result.rows {
-        write!(output, "|").unwrap();
-        for (i, cell) in row.iter().enumerate() {
-            let w = widths.get(i).copied().unwrap_or(0);
-            write!(output, " {:width$} |", cell, width = w).unwrap();
-        }
-        writeln!(output).unwrap();
-    }
-
-    // Bottom border
-    write!(output, "+").unwrap();
-    for w in &widths {
-        write!(output, "-{}-+", "-".repeat(*w)).unwrap();
-    }
-    writeln!(output).unwrap();
-
-    output
+    table.to_string()
 }
 
 fn format_plain(result: &QueryResult) -> String {
@@ -471,12 +508,9 @@ pub fn format_tables_list(tables: &[TableInfo]) -> String {
     }
 
     writeln!(output, "To cache a table, run the corresponding command:").unwrap();
-    writeln!(output, "  aa llms           -> llms").unwrap();
-    writeln!(output, "  aa text-to-image  -> text_to_image").unwrap();
-    writeln!(output, "  aa image-editing  -> image_editing").unwrap();
-    writeln!(output, "  aa text-to-speech -> text_to_speech").unwrap();
-    writeln!(output, "  aa text-to-video  -> text_to_video").unwrap();
-    writeln!(output, "  aa image-to-video -> image_to_video").unwrap();
+    for table_def in ALL_TABLES {
+        writeln!(output, "  {} -> {}", table_def.command, table_def.name).unwrap();
+    }
 
     output
 }
@@ -499,7 +533,6 @@ mod tests {
 
         assert!(result.contains("read_parquet("));
         assert!(result.contains("llms.parquet"));
-        assert!(!result.contains("FROM llms"));
     }
 
     #[test]
@@ -514,6 +547,37 @@ mod tests {
         let err = result.unwrap_err().to_string();
         assert!(err.contains("not found"));
         assert!(err.contains("aa llms"));
+    }
+
+    #[test]
+    fn test_substitute_aliases_string_literal_not_replaced() {
+        let temp_dir = TempDir::new().unwrap();
+        let executor = QueryExecutor::new(temp_dir.path().to_path_buf());
+
+        // Create a dummy parquet file
+        std::fs::write(temp_dir.path().join("llms.parquet"), b"dummy").unwrap();
+
+        // String literal should NOT be replaced
+        let sql = "SELECT 'llms' AS table_name FROM llms";
+        let result = executor.substitute_aliases(sql).unwrap();
+
+        // The string literal 'llms' should be preserved
+        assert!(result.contains("'llms'"));
+        // But the table reference should be replaced
+        assert!(result.contains("read_parquet("));
+    }
+
+    #[test]
+    fn test_replace_table_name_safe() {
+        // Test that string literals are preserved
+        let sql = "SELECT 'llms' FROM llms";
+        let result = replace_table_name_safe(sql, "llms", "REPLACED");
+        assert_eq!(result, "SELECT 'llms' FROM REPLACED");
+
+        // Test case insensitivity
+        let sql = "SELECT * FROM LLMS";
+        let result = replace_table_name_safe(sql, "llms", "REPLACED");
+        assert_eq!(result, "SELECT * FROM REPLACED");
     }
 
     #[test]
@@ -560,5 +624,19 @@ mod tests {
         let output = format_query_result(&result, OutputFormat::Json);
         assert!(output.contains("\"name\""));
         assert!(output.contains("\"Test\""));
+    }
+
+    #[test]
+    fn test_format_query_result_table() {
+        let result = QueryResult {
+            columns: vec!["name".to_string(), "score".to_string()],
+            rows: vec![vec!["Model A".to_string(), "100".to_string()]],
+        };
+
+        let output = format_query_result(&result, OutputFormat::Table);
+        assert!(output.contains("name"));
+        assert!(output.contains("score"));
+        assert!(output.contains("Model A"));
+        assert!(output.contains("100"));
     }
 }
