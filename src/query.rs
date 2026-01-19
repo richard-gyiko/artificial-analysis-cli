@@ -7,6 +7,7 @@ use crate::output::OutputFormat;
 use crate::schema::{self, Column, ALL_TABLES};
 use comfy_table::{presets::ASCII_BORDERS_ONLY_CONDENSED, Table};
 use duckdb::arrow::array::Array;
+use duckdb::arrow::record_batch::RecordBatch;
 use duckdb::Connection;
 use sqlparser::ast::{ObjectName, Visit, Visitor};
 use sqlparser::dialect::GenericDialect;
@@ -211,34 +212,17 @@ impl QueryExecutor {
 
     /// Execute a SQL query and return the results.
     pub fn execute(&self, sql: &str) -> Result<QueryResult> {
+        // Validate SQL syntax first using sqlparser to catch syntax errors
+        // before they reach DuckDB (which can throw uncatchable C++ exceptions)
+        let dialect = GenericDialect {};
+        Parser::parse_sql(&dialect, sql)
+            .map_err(|e| AppError::Query(format!("SQL syntax error: {}", e)))?;
+
         // Substitute table aliases
         let transformed_sql = self.substitute_aliases(sql)?;
 
-        // Open in-memory connection
-        let conn = Connection::open_in_memory()
-            .map_err(|e| AppError::Query(format!("DuckDB error: {}", e)))?;
-
-        // Execute the query and get results as Arrow RecordBatches
-        let mut stmt = conn.prepare(&transformed_sql).map_err(|e| {
-            // Provide helpful error messages for common mistakes
-            let msg = e.to_string();
-            if msg.contains("syntax error") {
-                AppError::Query(format!("SQL syntax error: {}", msg))
-            } else if msg.contains("does not exist") || msg.contains("not found") {
-                AppError::Query(format!(
-                    "Table or column not found. Use 'aa query --tables' to see available tables and columns.\nError: {}",
-                    msg
-                ))
-            } else {
-                AppError::Query(format!("SQL error: {}", msg))
-            }
-        })?;
-
-        // Use query_arrow to get results as Arrow RecordBatches (avoids panicky type conversion)
-        let batches: Vec<_> = stmt
-            .query_arrow([])
-            .map_err(|e| AppError::Query(format!("Query error: {}", e)))?
-            .collect();
+        // Execute the query
+        let batches = execute_duckdb_query(&transformed_sql)?;
 
         if batches.is_empty() {
             return Ok(QueryResult {
@@ -296,6 +280,37 @@ impl QueryExecutor {
 
         tables
     }
+}
+
+/// Execute a DuckDB query and return the results as Arrow RecordBatches.
+fn execute_duckdb_query(sql: &str) -> Result<Vec<RecordBatch>> {
+    // Open in-memory connection
+    let conn = Connection::open_in_memory()
+        .map_err(|e| AppError::Query(format!("DuckDB error: {}", e)))?;
+
+    // Execute the query and get results as Arrow RecordBatches
+    let mut stmt = conn.prepare(sql).map_err(|e| {
+        // Provide helpful error messages for common mistakes
+        let msg = e.to_string();
+        if msg.contains("syntax error") {
+            AppError::Query(format!("SQL syntax error: {}", msg))
+        } else if msg.contains("does not exist") || msg.contains("not found") {
+            AppError::Query(format!(
+                "Table or column not found. Use 'aa query --tables' to see available tables and columns.\nError: {}",
+                msg
+            ))
+        } else {
+            AppError::Query(format!("SQL error: {}", msg))
+        }
+    })?;
+
+    // Use query_arrow to get results as Arrow RecordBatches
+    let batches: Vec<RecordBatch> = stmt
+        .query_arrow([])
+        .map_err(|e| AppError::Query(format!("Query error: {}", e)))?
+        .collect();
+
+    Ok(batches)
 }
 
 /// Convert an Arrow array value at a given row index to a string.
