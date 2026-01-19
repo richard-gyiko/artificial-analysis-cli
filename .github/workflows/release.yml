@@ -53,9 +53,19 @@ jobs:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      hash_windows: ${{ steps.hashes.outputs.windows }}
+      hash_mac_arm: ${{ steps.hashes.outputs.mac_arm }}
+      hash_mac_x64: ${{ steps.hashes.outputs.mac_x64 }}
+      hash_linux: ${{ steps.hashes.outputs.linux }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -80,8 +90,49 @@ jobs:
           cd release
           sha256sum * > SHA256SUMS
 
+      - name: Extract hashes
+        id: hashes
+        run: |
+          cd release
+          echo "windows=$(grep 'windows-msvc.zip' SHA256SUMS | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
+          echo "mac_arm=$(grep 'aarch64-apple-darwin.tar.gz' SHA256SUMS | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
+          echo "mac_x64=$(grep 'x86_64-apple-darwin.tar.gz' SHA256SUMS | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
+          echo "linux=$(grep 'linux-gnu.tar.gz' SHA256SUMS | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: release/*
           generate_release_notes: true
+
+  update-scoop:
+    name: Update Scoop Bucket
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger scoop-bucket update
+        run: |
+          gh workflow run update-manifest.yml \
+            --repo richard-gyiko/scoop-bucket \
+            --field manifest=aa \
+            --field version=${{ needs.release.outputs.version }} \
+            --field hash=${{ needs.release.outputs.hash_windows }}
+        env:
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+
+  update-homebrew:
+    name: Update Homebrew Tap
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger homebrew-tap update
+        run: |
+          gh workflow run update-formula.yml \
+            --repo richard-gyiko/homebrew-tap \
+            --field formula=aa \
+            --field version=${{ needs.release.outputs.version }} \
+            --field sha256_mac_arm=${{ needs.release.outputs.hash_mac_arm }} \
+            --field sha256_mac_x64=${{ needs.release.outputs.hash_mac_x64 }} \
+            --field sha256_linux=${{ needs.release.outputs.hash_linux }}
+        env:
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
