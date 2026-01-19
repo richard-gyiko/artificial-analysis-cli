@@ -33,6 +33,10 @@ pub struct Cli {
     /// Bypass cache and fetch fresh data
     #[arg(long, global = true)]
     pub refresh: bool,
+
+    /// Suppress attribution notice (for scripting)
+    #[arg(long, short = 'q', global = true)]
+    pub quiet: bool,
 }
 
 impl Cli {
