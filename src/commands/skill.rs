@@ -7,9 +7,9 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, SystemTime};
 use zip::ZipArchive;
 
-/// URL for downloading skills.zip from GitHub releases.
+/// URL for downloading skill zip from GitHub releases.
 const SKILLS_ZIP_URL: &str =
-    "https://github.com/richard-gyiko/which-llm/releases/latest/download/skills.zip";
+    "https://github.com/richard-gyiko/which-llm/releases/latest/download/which-llm-skill.zip";
 
 /// Cache TTL for skills.zip (24 hours).
 const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
