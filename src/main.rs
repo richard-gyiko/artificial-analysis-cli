@@ -1,4 +1,4 @@
-//! Artificial Analysis CLI - Query AI model benchmarks from the terminal.
+//! which-llm - Query AI model benchmarks from the terminal.
 
 use clap::Parser;
 use which_llm::{
