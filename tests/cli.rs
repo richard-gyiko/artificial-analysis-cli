@@ -75,17 +75,6 @@ fn test_llms_requires_api_key() {
 }
 
 #[test]
-fn test_quota_no_data() {
-    let temp = tempfile::tempdir().unwrap();
-    cmd_with_temp_config(&temp)
-        .env("ARTIFICIAL_ANALYSIS_API_KEY", "test_key")
-        .arg("quota")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("No quota data available"));
-}
-
-#[test]
 fn test_output_format_flags() {
     let temp = tempfile::tempdir().unwrap();
     cmd_with_temp_config(&temp)

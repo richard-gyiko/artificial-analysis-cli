@@ -59,7 +59,7 @@ async fn run() -> Result<()> {
     let client = Client::new(api_key, profile_name)?;
 
     // Handle commands that need API access
-    let (quota, show_hint) = match &cli.command {
+    let show_hint = match &cli.command {
         Commands::Llms {
             model,
             creator,
@@ -80,7 +80,7 @@ async fn run() -> Result<()> {
                 modality: modality.clone(),
             };
 
-            let q = commands::llms::run(
+            commands::llms::run(
                 &client,
                 cli.refresh,
                 format,
@@ -90,34 +90,27 @@ async fn run() -> Result<()> {
                 capability_filters,
             )
             .await?;
-            (q, Some("llms"))
+            Some("llms")
         }
         Commands::TextToImage { categories } => {
-            let q = commands::media::run_text_to_image(&client, cli.refresh, format, *categories)
-                .await?;
-            (q, Some("text_to_image"))
+            commands::media::run_text_to_image(&client, cli.refresh, format, *categories).await?;
+            Some("text_to_image")
         }
         Commands::ImageEditing => {
-            let q = commands::media::run_image_editing(&client, cli.refresh, format).await?;
-            (q, Some("image_editing"))
+            commands::media::run_image_editing(&client, cli.refresh, format).await?;
+            Some("image_editing")
         }
         Commands::TextToSpeech => {
-            let q = commands::media::run_text_to_speech(&client, cli.refresh, format).await?;
-            (q, Some("text_to_speech"))
+            commands::media::run_text_to_speech(&client, cli.refresh, format).await?;
+            Some("text_to_speech")
         }
         Commands::TextToVideo { categories } => {
-            let q = commands::media::run_text_to_video(&client, cli.refresh, format, *categories)
-                .await?;
-            (q, Some("text_to_video"))
+            commands::media::run_text_to_video(&client, cli.refresh, format, *categories).await?;
+            Some("text_to_video")
         }
         Commands::ImageToVideo { categories } => {
-            let q = commands::media::run_image_to_video(&client, cli.refresh, format, *categories)
-                .await?;
-            (q, Some("image_to_video"))
-        }
-        Commands::Quota => {
-            commands::quota::run(&client)?;
-            (None, None)
+            commands::media::run_image_to_video(&client, cli.refresh, format, *categories).await?;
+            Some("image_to_video")
         }
         // Profile, Cache, and Query are handled above
         Commands::Profile { .. } | Commands::Cache { .. } | Commands::Query { .. } => {
@@ -137,19 +130,6 @@ async fn run() -> Result<()> {
             println!(
                 "Tip: Use 'which-llm query \"SELECT * FROM {} WHERE ...\"' for advanced filtering",
                 table
-            );
-        }
-    }
-
-    // Show low quota warning if applicable
-    if let Some(q) = quota {
-        if q.is_low() {
-            eprintln!();
-            eprintln!(
-                "WARNING: API quota is low ({} of {} requests remaining, {:.1}%)",
-                q.remaining,
-                q.limit,
-                q.percentage_remaining()
             );
         }
     }

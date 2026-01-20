@@ -1,6 +1,5 @@
 //! LLM models command.
 
-use crate::cache::QuotaInfo;
 use crate::client::Client;
 use crate::error::Result;
 use crate::models::LlmModel;
@@ -128,8 +127,8 @@ pub async fn run(
     creator_filter: Option<&str>,
     sort_by: Option<&str>,
     capability_filters: CapabilityFilters,
-) -> Result<Option<QuotaInfo>> {
-    let (mut models, quota) = client.get_llm_models(refresh).await?;
+) -> Result<()> {
+    let mut models = client.get_llm_models(refresh).await?;
 
     // Apply name/slug filters
     if let Some(slug) = model_filter {
@@ -233,5 +232,5 @@ pub async fn run(
         println!("{}", format_output(&rows, format));
     }
 
-    Ok(quota)
+    Ok(())
 }

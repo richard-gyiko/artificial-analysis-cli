@@ -17,31 +17,6 @@ struct CacheEntry<T> {
     cached_at: DateTime<Utc>,
 }
 
-/// Quota information from API response headers.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QuotaInfo {
-    pub limit: u32,
-    pub remaining: u32,
-    pub reset: String,
-    pub updated_at: DateTime<Utc>,
-}
-
-impl QuotaInfo {
-    /// Check if quota is low (below 10%).
-    pub fn is_low(&self) -> bool {
-        let threshold = (self.limit as f64 * 0.1) as u32;
-        self.remaining < threshold
-    }
-
-    /// Get the percentage remaining.
-    pub fn percentage_remaining(&self) -> f64 {
-        if self.limit == 0 {
-            return 0.0;
-        }
-        (self.remaining as f64 / self.limit as f64) * 100.0
-    }
-}
-
 /// Cache manager for API responses.
 pub struct Cache {
     base_dir: PathBuf,
@@ -124,24 +99,6 @@ impl Cache {
         Ok(())
     }
 
-    /// Store quota info for a profile.
-    pub fn set_quota(&self, profile: &str, quota: &QuotaInfo) -> Result<()> {
-        let path = self.base_dir.join(format!("quota-{profile}.json"));
-        let content = serde_json::to_string_pretty(quota)?;
-        std::fs::write(&path, content)?;
-        Ok(())
-    }
-
-    /// Get quota info for a profile.
-    pub fn get_quota(&self, profile: &str) -> Option<QuotaInfo> {
-        let path = self.base_dir.join(format!("quota-{profile}.json"));
-        if !path.exists() {
-            return None;
-        }
-        let content = std::fs::read_to_string(&path).ok()?;
-        serde_json::from_str(&content).ok()
-    }
-
     /// Clear all cached data.
     pub fn clear(&self) -> Result<()> {
         for entry in std::fs::read_dir(&self.base_dir)? {
@@ -211,24 +168,5 @@ mod tests {
 
         assert_ne!(key1, key2);
         assert_eq!(key1, key3);
-    }
-
-    #[test]
-    fn test_quota_is_low() {
-        let quota = QuotaInfo {
-            limit: 1000,
-            remaining: 50,
-            reset: "2024-01-01T00:00:00Z".into(),
-            updated_at: Utc::now(),
-        };
-        assert!(quota.is_low());
-
-        let quota = QuotaInfo {
-            limit: 1000,
-            remaining: 500,
-            reset: "2024-01-01T00:00:00Z".into(),
-            updated_at: Utc::now(),
-        };
-        assert!(!quota.is_low());
     }
 }

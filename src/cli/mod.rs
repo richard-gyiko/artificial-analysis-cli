@@ -135,9 +135,6 @@ pub enum Commands {
         tables: bool,
     },
 
-    /// Check API quota status
-    Quota,
-
     /// Manage response cache
     Cache {
         #[command(subcommand)]

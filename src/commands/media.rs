@@ -1,6 +1,5 @@
 //! Media model commands (text-to-image, video, speech, etc.).
 
-use crate::cache::QuotaInfo;
 use crate::client::Client;
 use crate::error::Result;
 use crate::models::MediaModel;
@@ -140,21 +139,17 @@ pub async fn run_text_to_image(
     refresh: bool,
     format: OutputFormat,
     categories: bool,
-) -> Result<Option<QuotaInfo>> {
-    let (models, quota) = client.get_text_to_image(refresh).await?;
+) -> Result<()> {
+    let models = client.get_text_to_image(refresh).await?;
     print_media_output(&models, format, categories);
-    Ok(quota)
+    Ok(())
 }
 
 /// Run image-editing command.
-pub async fn run_image_editing(
-    client: &Client,
-    refresh: bool,
-    format: OutputFormat,
-) -> Result<Option<QuotaInfo>> {
-    let (models, quota) = client.get_image_editing(refresh).await?;
+pub async fn run_image_editing(client: &Client, refresh: bool, format: OutputFormat) -> Result<()> {
+    let models = client.get_image_editing(refresh).await?;
     print_media_output(&models, format, false);
-    Ok(quota)
+    Ok(())
 }
 
 /// Run text-to-speech command.
@@ -162,10 +157,10 @@ pub async fn run_text_to_speech(
     client: &Client,
     refresh: bool,
     format: OutputFormat,
-) -> Result<Option<QuotaInfo>> {
-    let (models, quota) = client.get_text_to_speech(refresh).await?;
+) -> Result<()> {
+    let models = client.get_text_to_speech(refresh).await?;
     print_media_output(&models, format, false);
-    Ok(quota)
+    Ok(())
 }
 
 /// Run text-to-video command.
@@ -174,10 +169,10 @@ pub async fn run_text_to_video(
     refresh: bool,
     format: OutputFormat,
     categories: bool,
-) -> Result<Option<QuotaInfo>> {
-    let (models, quota) = client.get_text_to_video(refresh).await?;
+) -> Result<()> {
+    let models = client.get_text_to_video(refresh).await?;
     print_media_output(&models, format, categories);
-    Ok(quota)
+    Ok(())
 }
 
 /// Run image-to-video command.
@@ -186,8 +181,8 @@ pub async fn run_image_to_video(
     refresh: bool,
     format: OutputFormat,
     categories: bool,
-) -> Result<Option<QuotaInfo>> {
-    let (models, quota) = client.get_image_to_video(refresh).await?;
+) -> Result<()> {
+    let models = client.get_image_to_video(refresh).await?;
     print_media_output(&models, format, categories);
-    Ok(quota)
+    Ok(())
 }

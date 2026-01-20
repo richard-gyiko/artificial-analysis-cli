@@ -22,9 +22,9 @@
 - [x] 4.3 Update `README.md` - environment variable documentation
 
 ## 5. Build & Release (Post-Merge)
-- [ ] 5.1 Update GitHub Actions workflows if they reference binary name
-- [ ] 5.2 Update Homebrew formula (external repo: richard-gyiko/homebrew-tap)
-- [ ] 5.3 Update Scoop manifest (external repo: richard-gyiko/scoop-bucket)
+- [x] 5.1 Update GitHub Actions workflows if they reference binary name
+- [x] 5.2 Update Homebrew formula (external repo: richard-gyiko/homebrew-tap)
+- [x] 5.3 Update Scoop manifest (external repo: richard-gyiko/scoop-bucket)
 - [ ] 5.4 Verify release artifacts use new binary name
 
 ## 6. Verification

@@ -1,6 +1,6 @@
 //! Unified API client for fetching and merging data from multiple sources.
 
-use crate::cache::{Cache, QuotaInfo};
+use crate::cache::Cache;
 use crate::error::Result;
 use crate::merge::merge_models;
 use crate::models::{LlmModel, MediaModel};
@@ -43,11 +43,6 @@ impl Client {
         &self.cache
     }
 
-    /// Get cached quota info.
-    pub fn get_cached_quota(&self) -> Option<QuotaInfo> {
-        self.aa_client.get_cached_quota()
-    }
-
     // ========== LLM Data (Three-Layer Cache) ==========
 
     /// Fetch merged LLM models.
@@ -57,10 +52,7 @@ impl Client {
     /// 2. Fetch/use cached AA data
     /// 3. Fetch/use cached models.dev data (with 24h TTL)
     /// 4. Merge and cache the result
-    pub async fn get_llm_models(
-        &self,
-        refresh: bool,
-    ) -> Result<(Vec<LlmModel>, Option<QuotaInfo>)> {
+    pub async fn get_llm_models(&self, refresh: bool) -> Result<Vec<LlmModel>> {
         let merged_path = self.cache.parquet_path("llms");
         let aa_path = self.cache.parquet_path("aa_llms");
         let md_path = self.cache.parquet_path("models_dev");
@@ -76,12 +68,12 @@ impl Client {
         {
             // Load from merged parquet cache
             if let Ok(models) = self.load_merged_cache(&merged_path) {
-                return Ok((models, self.get_cached_quota()));
+                return Ok(models);
             }
         }
 
         // Fetch AA data
-        let (aa_models, quota) = self.fetch_aa_llms(refresh).await?;
+        let aa_models = self.fetch_aa_llms(refresh).await?;
         let aa_changed = refresh || !aa_path.exists();
 
         // Fetch models.dev data (with TTL check)
@@ -108,7 +100,7 @@ impl Client {
             }
         }
 
-        Ok((merged, quota))
+        Ok(merged)
     }
 
     /// Load merged LLM models from parquet cache.
@@ -187,8 +179,8 @@ impl Client {
     }
 
     /// Fetch AA LLM models and write to cache.
-    async fn fetch_aa_llms(&self, refresh: bool) -> Result<(Vec<AaLlmModel>, Option<QuotaInfo>)> {
-        let (models, quota) = self.aa_client.fetch_llm_models(refresh).await?;
+    async fn fetch_aa_llms(&self, refresh: bool) -> Result<Vec<AaLlmModel>> {
+        let models = self.aa_client.fetch_llm_models(refresh).await?;
 
         // Write raw AA data to parquet
         let aa_path = self.cache.parquet_path("aa_llms");
@@ -197,7 +189,7 @@ impl Client {
             eprintln!("Warning: Failed to write AA Parquet cache: {}", e);
         }
 
-        Ok((models, quota))
+        Ok(models)
     }
 
     /// Fetch models.dev data if cache is expired or missing.
@@ -297,67 +289,52 @@ impl Client {
     // ========== Media Models (AA-only) ==========
 
     /// Fetch text-to-image models.
-    pub async fn get_text_to_image(
-        &self,
-        refresh: bool,
-    ) -> Result<(Vec<MediaModel>, Option<QuotaInfo>)> {
-        let (models, quota) = self.aa_client.fetch_text_to_image(refresh).await?;
+    pub async fn get_text_to_image(&self, refresh: bool) -> Result<Vec<MediaModel>> {
+        let models = self.aa_client.fetch_text_to_image(refresh).await?;
         let parquet_path = self.cache.parquet_path("text_to_image");
         if let Err(e) = parquet::write_media_parquet(&models, &parquet_path) {
             eprintln!("Warning: Failed to write Parquet cache: {}", e);
         }
-        Ok((models, quota))
+        Ok(models)
     }
 
     /// Fetch image-editing models.
-    pub async fn get_image_editing(
-        &self,
-        refresh: bool,
-    ) -> Result<(Vec<MediaModel>, Option<QuotaInfo>)> {
-        let (models, quota) = self.aa_client.fetch_image_editing(refresh).await?;
+    pub async fn get_image_editing(&self, refresh: bool) -> Result<Vec<MediaModel>> {
+        let models = self.aa_client.fetch_image_editing(refresh).await?;
         let parquet_path = self.cache.parquet_path("image_editing");
         if let Err(e) = parquet::write_media_parquet(&models, &parquet_path) {
             eprintln!("Warning: Failed to write Parquet cache: {}", e);
         }
-        Ok((models, quota))
+        Ok(models)
     }
 
     /// Fetch text-to-speech models.
-    pub async fn get_text_to_speech(
-        &self,
-        refresh: bool,
-    ) -> Result<(Vec<MediaModel>, Option<QuotaInfo>)> {
-        let (models, quota) = self.aa_client.fetch_text_to_speech(refresh).await?;
+    pub async fn get_text_to_speech(&self, refresh: bool) -> Result<Vec<MediaModel>> {
+        let models = self.aa_client.fetch_text_to_speech(refresh).await?;
         let parquet_path = self.cache.parquet_path("text_to_speech");
         if let Err(e) = parquet::write_media_parquet(&models, &parquet_path) {
             eprintln!("Warning: Failed to write Parquet cache: {}", e);
         }
-        Ok((models, quota))
+        Ok(models)
     }
 
     /// Fetch text-to-video models.
-    pub async fn get_text_to_video(
-        &self,
-        refresh: bool,
-    ) -> Result<(Vec<MediaModel>, Option<QuotaInfo>)> {
-        let (models, quota) = self.aa_client.fetch_text_to_video(refresh).await?;
+    pub async fn get_text_to_video(&self, refresh: bool) -> Result<Vec<MediaModel>> {
+        let models = self.aa_client.fetch_text_to_video(refresh).await?;
         let parquet_path = self.cache.parquet_path("text_to_video");
         if let Err(e) = parquet::write_media_parquet(&models, &parquet_path) {
             eprintln!("Warning: Failed to write Parquet cache: {}", e);
         }
-        Ok((models, quota))
+        Ok(models)
     }
 
     /// Fetch image-to-video models.
-    pub async fn get_image_to_video(
-        &self,
-        refresh: bool,
-    ) -> Result<(Vec<MediaModel>, Option<QuotaInfo>)> {
-        let (models, quota) = self.aa_client.fetch_image_to_video(refresh).await?;
+    pub async fn get_image_to_video(&self, refresh: bool) -> Result<Vec<MediaModel>> {
+        let models = self.aa_client.fetch_image_to_video(refresh).await?;
         let parquet_path = self.cache.parquet_path("image_to_video");
         if let Err(e) = parquet::write_media_parquet(&models, &parquet_path) {
             eprintln!("Warning: Failed to write Parquet cache: {}", e);
         }
-        Ok((models, quota))
+        Ok(models)
     }
 }

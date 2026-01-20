@@ -194,9 +194,6 @@ All media tables (`text_to_image`, `image_editing`, etc.) share this schema:
 ### Other Commands
 
 ```bash
-# Check API quota
-which-llm quota
-
 # Manage cache
 which-llm cache status
 which-llm cache clear
