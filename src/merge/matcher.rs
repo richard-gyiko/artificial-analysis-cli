@@ -1,31 +1,28 @@
 //! Model matching algorithm for correlating AA and models.dev data.
 
 use crate::sources::models_dev::models::{ModelsDevModel, ModelsDevProvider};
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::LazyLock;
 
 /// Pre-compiled regex patterns for version suffix stripping.
-static RE_DATE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-\d{8}$").unwrap());
-static RE_DATE_DASHED: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"-\d{4}-\d{2}-\d{2}$").unwrap());
-static RE_VERSION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-v\d+(\.\d+)*$").unwrap());
+static RE_DATE: Lazy<Regex> = Lazy::new(|| Regex::new(r"-\d{8}$").unwrap());
+static RE_DATE_DASHED: Lazy<Regex> = Lazy::new(|| Regex::new(r"-\d{4}-\d{2}-\d{2}$").unwrap());
+static RE_VERSION: Lazy<Regex> = Lazy::new(|| Regex::new(r"-v\d+(\.\d+)*$").unwrap());
 
 /// Pre-compiled regex pattern for version separator normalization (dots to dashes between digits).
-static RE_VERSION_SEPARATOR: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d)\.(\d)").unwrap());
+static RE_VERSION_SEPARATOR: Lazy<Regex> = Lazy::new(|| Regex::new(r"(\d)\.(\d)").unwrap());
 
 /// Pre-compiled regex pattern for compressed version expansion (e.g., -35- → -3-5-).
 /// Matches a hyphen followed by two consecutive digits, followed by either another hyphen or end of string.
 /// We use two patterns: one for mid-string (-35-) and one for end of string (-35$).
-static RE_COMPRESSED_VERSION_MID: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"-(\d)(\d)-").unwrap());
-static RE_COMPRESSED_VERSION_END: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"-(\d)(\d)$").unwrap());
+static RE_COMPRESSED_VERSION_MID: Lazy<Regex> = Lazy::new(|| Regex::new(r"-(\d)(\d)-").unwrap());
+static RE_COMPRESSED_VERSION_END: Lazy<Regex> = Lazy::new(|| Regex::new(r"-(\d)(\d)$").unwrap());
 
 /// Provider name mapping from AA to models.dev (pre-computed).
 /// AA uses different provider slugs than models.dev in some cases.
-static PROVIDER_MAPPING: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
+static PROVIDER_MAPPING: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     let mut map = HashMap::new();
     map.insert("meta", "llama");
     map.insert("meta-llama", "llama");
@@ -337,10 +334,10 @@ impl<'a> ModelIdVariants<'a> {
 
 /// Helper function to find a model matching a predicate across all providers.
 /// Returns the first match found.
-fn find_model_by<'a, F>(
-    providers: &'a HashMap<String, ModelsDevProvider>,
+fn find_model_by<F>(
+    providers: &HashMap<String, ModelsDevProvider>,
     mut predicate: F,
-) -> Option<(&'a str, &'a ModelsDevModel)>
+) -> Option<(&str, &ModelsDevModel)>
 where
     F: FnMut(&str, &ModelIdVariants<'_>) -> bool,
 {

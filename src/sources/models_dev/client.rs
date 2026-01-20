@@ -54,17 +54,6 @@ impl ModelsDevClient {
     }
 }
 
-impl Default for ModelsDevClient {
-    /// Creates a default ModelsDevClient.
-    ///
-    /// # Panics
-    /// Panics if the HTTP client cannot be created (e.g., TLS initialization failure).
-    /// This is extremely rare in practice and typically indicates a broken runtime.
-    fn default() -> Self {
-        Self::new().expect("Failed to create ModelsDevClient: HTTP client initialization failed")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

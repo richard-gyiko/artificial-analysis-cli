@@ -16,6 +16,7 @@ dependencies = [
  "dirs",
  "duckdb",
  "hex",
+ "once_cell",
  "predicates",
  "regex",
  "reqwest",
