@@ -1,4 +1,4 @@
-# Artificial Analysis CLI
+# which-llm
 
 A command-line interface for querying AI model benchmarks from [Artificial Analysis](https://artificialanalysis.ai), enriched with capability metadata from [models.dev](https://models.dev).
 
@@ -20,21 +20,21 @@ scoop install which-llm
 
 ### Manual Download
 
-Download the latest release from [GitHub Releases](https://github.com/richard-gyiko/artificial-analysis-cli/releases):
+Download the latest release from [GitHub Releases](https://github.com/richard-gyiko/which-llm-cli/releases):
 
 ```bash
 # macOS (Apple Silicon)
-curl -LO https://github.com/richard-gyiko/artificial-analysis-cli/releases/latest/download/which-llm-aarch64-apple-darwin.tar.gz
+curl -LO https://github.com/richard-gyiko/which-llm-cli/releases/latest/download/which-llm-aarch64-apple-darwin.tar.gz
 tar -xzf which-llm-aarch64-apple-darwin.tar.gz
 sudo mv which-llm /usr/local/bin/
 
 # macOS (Intel)
-curl -LO https://github.com/richard-gyiko/artificial-analysis-cli/releases/latest/download/which-llm-x86_64-apple-darwin.tar.gz
+curl -LO https://github.com/richard-gyiko/which-llm-cli/releases/latest/download/which-llm-x86_64-apple-darwin.tar.gz
 tar -xzf which-llm-x86_64-apple-darwin.tar.gz
 sudo mv which-llm /usr/local/bin/
 
 # Linux
-curl -LO https://github.com/richard-gyiko/artificial-analysis-cli/releases/latest/download/which-llm-x86_64-unknown-linux-gnu.tar.gz
+curl -LO https://github.com/richard-gyiko/which-llm-cli/releases/latest/download/which-llm-x86_64-unknown-linux-gnu.tar.gz
 tar -xzf which-llm-x86_64-unknown-linux-gnu.tar.gz
 sudo mv which-llm /usr/local/bin/
 ```

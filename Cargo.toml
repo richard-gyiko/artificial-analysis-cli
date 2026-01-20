@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "CLI for querying AI model benchmarks from Artificial Analysis"
 license = "MIT"
-repository = "https://github.com/anomalyco/artificial-analysis-cli"
+repository = "https://github.com/richard-gyiko/which-llm-cli"
 keywords = ["ai", "llm", "benchmark", "cli"]
 categories = ["command-line-utilities"]
 
