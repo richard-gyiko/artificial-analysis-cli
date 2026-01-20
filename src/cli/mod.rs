@@ -68,9 +68,34 @@ pub enum Commands {
         #[arg(long, short = 'c')]
         creator: Option<String>,
 
-        /// Sort by field (intelligence, price, speed)
+        /// Sort by field (intelligence, price, speed, context)
         #[arg(long, short = 's')]
         sort: Option<String>,
+
+        // Capability filters
+        /// Filter by reasoning support (chain-of-thought models)
+        #[arg(long)]
+        reasoning: bool,
+
+        /// Filter by tool/function calling support
+        #[arg(long)]
+        tool_call: bool,
+
+        /// Filter by structured JSON output support
+        #[arg(long)]
+        structured_output: bool,
+
+        /// Filter by file attachment support
+        #[arg(long)]
+        attachment: bool,
+
+        /// Filter by minimum context window (tokens)
+        #[arg(long)]
+        min_context: Option<u64>,
+
+        /// Filter by modality (e.g., "input:image", "output:text")
+        #[arg(long)]
+        modality: Option<String>,
     },
 
     /// List text-to-image model rankings

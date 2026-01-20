@@ -3,7 +3,7 @@
 use aa::{
     cli::{CacheCommands, Cli, Commands, ProfileCommands},
     client::Client,
-    commands,
+    commands::{self, llms::CapabilityFilters},
     config::Config,
     error::Result,
 };
@@ -64,7 +64,22 @@ async fn run() -> Result<()> {
             model,
             creator,
             sort,
+            reasoning,
+            tool_call,
+            structured_output,
+            attachment,
+            min_context,
+            modality,
         } => {
+            let capability_filters = CapabilityFilters {
+                reasoning: *reasoning,
+                tool_call: *tool_call,
+                structured_output: *structured_output,
+                attachment: *attachment,
+                min_context: *min_context,
+                modality: modality.clone(),
+            };
+
             let q = commands::llms::run(
                 &client,
                 cli.refresh,
@@ -72,6 +87,7 @@ async fn run() -> Result<()> {
                 model.as_deref(),
                 creator.as_deref(),
                 sort.as_deref(),
+                capability_filters,
             )
             .await?;
             (q, Some("llms"))
@@ -113,6 +129,7 @@ async fn run() -> Result<()> {
     if !cli.quiet {
         println!();
         println!("Data provided by Artificial Analysis (https://artificialanalysis.ai)");
+        println!("Capability data from models.dev (https://models.dev)");
 
         // Show hint about aa query for advanced filtering
         if let Some(table) = show_hint {

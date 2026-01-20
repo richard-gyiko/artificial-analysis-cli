@@ -1,6 +1,6 @@
 # Artificial Analysis CLI
 
-A command-line interface for querying AI model benchmarks from [Artificial Analysis](https://artificialanalysis.ai).
+A command-line interface for querying AI model benchmarks from [Artificial Analysis](https://artificialanalysis.ai), enriched with capability metadata from [models.dev](https://models.dev).
 
 ## Installation
 
@@ -107,6 +107,12 @@ aa query "SELECT creator, COUNT(*) as models, ROUND(AVG(intelligence), 1) as avg
 # Top image generation models
 aa query "SELECT name, creator, elo, rank FROM text_to_image WHERE elo > 1200 ORDER BY elo DESC"
 
+# Models with tool calling and large context windows
+aa query "SELECT name, creator, context_window, tool_call FROM llms WHERE tool_call = true AND context_window > 100000 ORDER BY context_window DESC"
+
+# Reasoning models with their capabilities
+aa query "SELECT name, creator, intelligence, reasoning, context_window FROM llms WHERE reasoning = true ORDER BY intelligence DESC LIMIT 10"
+
 # List available tables and their schemas
 aa query --tables
 ```
@@ -124,6 +130,8 @@ aa query --tables
 
 #### LLMs Table Columns
 
+**Core Fields (from Artificial Analysis)**
+
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | VARCHAR | Model ID |
@@ -137,11 +145,37 @@ aa query --tables
 | `math` | DOUBLE | Math index |
 | `mmlu_pro` | DOUBLE | MMLU-Pro score |
 | `gpqa` | DOUBLE | GPQA score |
+| `hle` | DOUBLE | HLE score |
+| `livecodebench` | DOUBLE | LiveCodeBench score |
+| `scicode` | DOUBLE | SciCode score |
+| `math_500` | DOUBLE | MATH-500 score |
+| `aime` | DOUBLE | AIME score |
 | `input_price` | DOUBLE | Input price per 1M tokens |
 | `output_price` | DOUBLE | Output price per 1M tokens |
 | `price` | DOUBLE | Blended price (3:1 ratio) |
 | `tps` | DOUBLE | Tokens per second |
 | `latency` | DOUBLE | Time to first token (seconds) |
+
+**Capability Fields (enriched from [models.dev](https://models.dev))**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `reasoning` | BOOLEAN | Supports chain-of-thought reasoning |
+| `tool_call` | BOOLEAN | Supports function/tool calling |
+| `structured_output` | BOOLEAN | Supports structured JSON output |
+| `attachment` | BOOLEAN | Supports file attachments |
+| `temperature` | BOOLEAN | Supports temperature parameter |
+| `context_window` | BIGINT | Maximum context window (tokens) |
+| `max_input_tokens` | BIGINT | Maximum input tokens |
+| `max_output_tokens` | BIGINT | Maximum output tokens |
+| `input_modalities` | VARCHAR | Input types (e.g., "text,image") |
+| `output_modalities` | VARCHAR | Output types (e.g., "text") |
+| `knowledge_cutoff` | VARCHAR | Training data cutoff date |
+| `open_weights` | BOOLEAN | Model weights are publicly available |
+| `last_updated` | VARCHAR | Last update date |
+| `models_dev_matched` | BOOLEAN | Whether model was matched to models.dev |
+
+> **Note:** Capability fields are `NULL` for models not matched to models.dev (~53% of models). Use `models_dev_matched = true` to filter for models with full capability data.
 
 #### Media Tables Columns
 
@@ -206,7 +240,8 @@ See the [which-llm repository](https://github.com/richard-gyiko/which-llm) for f
 
 ## Attribution
 
-Data provided by [Artificial Analysis](https://artificialanalysis.ai).
+- Benchmark data provided by [Artificial Analysis](https://artificialanalysis.ai)
+- Capability metadata provided by [models.dev](https://models.dev)
 
 This CLI uses the [Artificial Analysis API](https://artificialanalysis.ai/documentation). Per the API terms, attribution is required for all use of the data.
 

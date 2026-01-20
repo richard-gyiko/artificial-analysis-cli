@@ -39,12 +39,13 @@ impl TableDef {
     }
 }
 
-// LLM table schema
+// Merged LLM table schema (user-facing)
 pub const LLMS: TableDef = TableDef {
     name: "llms",
     command: "aa llms",
     parquet_file: "llms.parquet",
     columns: &[
+        // Core identity
         Column {
             name: "id",
             sql_type: "VARCHAR",
@@ -75,6 +76,7 @@ pub const LLMS: TableDef = TableDef {
             sql_type: "VARCHAR",
             nullable: true,
         },
+        // Benchmarks (AA)
         Column {
             name: "intelligence",
             sql_type: "DOUBLE",
@@ -101,6 +103,32 @@ pub const LLMS: TableDef = TableDef {
             nullable: true,
         },
         Column {
+            name: "hle",
+            sql_type: "DOUBLE",
+            nullable: true,
+        },
+        Column {
+            name: "livecodebench",
+            sql_type: "DOUBLE",
+            nullable: true,
+        },
+        Column {
+            name: "scicode",
+            sql_type: "DOUBLE",
+            nullable: true,
+        },
+        Column {
+            name: "math_500",
+            sql_type: "DOUBLE",
+            nullable: true,
+        },
+        Column {
+            name: "aime",
+            sql_type: "DOUBLE",
+            nullable: true,
+        },
+        // Pricing (AA)
+        Column {
             name: "input_price",
             sql_type: "DOUBLE",
             nullable: true,
@@ -115,6 +143,7 @@ pub const LLMS: TableDef = TableDef {
             sql_type: "DOUBLE",
             nullable: true,
         },
+        // Performance (AA)
         Column {
             name: "tps",
             sql_type: "DOUBLE",
@@ -124,6 +153,81 @@ pub const LLMS: TableDef = TableDef {
             name: "latency",
             sql_type: "DOUBLE",
             nullable: true,
+        },
+        // Capabilities (models.dev)
+        Column {
+            name: "reasoning",
+            sql_type: "BOOLEAN",
+            nullable: true,
+        },
+        Column {
+            name: "tool_call",
+            sql_type: "BOOLEAN",
+            nullable: true,
+        },
+        Column {
+            name: "structured_output",
+            sql_type: "BOOLEAN",
+            nullable: true,
+        },
+        Column {
+            name: "attachment",
+            sql_type: "BOOLEAN",
+            nullable: true,
+        },
+        Column {
+            name: "temperature",
+            sql_type: "BOOLEAN",
+            nullable: true,
+        },
+        // Limits (models.dev)
+        Column {
+            name: "context_window",
+            sql_type: "BIGINT",
+            nullable: true,
+        },
+        Column {
+            name: "max_input_tokens",
+            sql_type: "BIGINT",
+            nullable: true,
+        },
+        Column {
+            name: "max_output_tokens",
+            sql_type: "BIGINT",
+            nullable: true,
+        },
+        // Modalities (models.dev, comma-separated)
+        Column {
+            name: "input_modalities",
+            sql_type: "VARCHAR",
+            nullable: true,
+        },
+        Column {
+            name: "output_modalities",
+            sql_type: "VARCHAR",
+            nullable: true,
+        },
+        // Additional metadata (models.dev)
+        Column {
+            name: "knowledge_cutoff",
+            sql_type: "VARCHAR",
+            nullable: true,
+        },
+        Column {
+            name: "open_weights",
+            sql_type: "BOOLEAN",
+            nullable: true,
+        },
+        Column {
+            name: "last_updated",
+            sql_type: "VARCHAR",
+            nullable: true,
+        },
+        // Source tracking
+        Column {
+            name: "models_dev_matched",
+            sql_type: "BOOLEAN",
+            nullable: false,
         },
     ],
 };
@@ -203,7 +307,7 @@ pub const IMAGE_TO_VIDEO: TableDef = TableDef {
     columns: MEDIA_COLUMNS,
 };
 
-/// All available tables.
+/// All available tables (user-facing).
 pub const ALL_TABLES: &[&TableDef] = &[
     &LLMS,
     &TEXT_TO_IMAGE,
@@ -236,6 +340,10 @@ mod tests {
         assert!(sql.contains("CREATE TABLE llms"));
         assert!(sql.contains("id VARCHAR NOT NULL"));
         assert!(sql.contains("intelligence DOUBLE"));
+        // New capability fields
+        assert!(sql.contains("reasoning BOOLEAN"));
+        assert!(sql.contains("tool_call BOOLEAN"));
+        assert!(sql.contains("context_window BIGINT"));
     }
 
     #[test]
@@ -254,5 +362,20 @@ mod tests {
     #[test]
     fn test_all_tables_count() {
         assert_eq!(ALL_TABLES.len(), 6);
+    }
+
+    #[test]
+    fn test_llms_has_capability_columns() {
+        let llms = get_table_def("llms").unwrap();
+        let column_names: Vec<_> = llms.columns.iter().map(|c| c.name).collect();
+
+        assert!(column_names.contains(&"reasoning"));
+        assert!(column_names.contains(&"tool_call"));
+        assert!(column_names.contains(&"structured_output"));
+        assert!(column_names.contains(&"attachment"));
+        assert!(column_names.contains(&"context_window"));
+        assert!(column_names.contains(&"input_modalities"));
+        assert!(column_names.contains(&"output_modalities"));
+        assert!(column_names.contains(&"models_dev_matched"));
     }
 }

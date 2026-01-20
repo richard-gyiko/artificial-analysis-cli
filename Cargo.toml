@@ -44,6 +44,12 @@ chrono = { version = "0.4", features = ["serde"] }
 sha2 = "0.10"
 hex = "0.4"
 
+# Regex for model matching
+regex = "1"
+
+# Lazy initialization (MSRV-compatible alternative to std::sync::LazyLock)
+once_cell = "1"
+
 # SQL query support
 duckdb = { version = "1.2", features = ["bundled", "parquet", "appender-arrow"] }
 sqlparser = { version = "0.41", features = ["visitor"] }
