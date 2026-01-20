@@ -7,6 +7,7 @@ use crate::models::{ApiResponse, MediaModel};
 use chrono::Utc;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::de::DeserializeOwned;
+use std::time::Duration;
 
 /// Base URL for the Artificial Analysis API.
 pub const API_BASE: &str = "https://artificialanalysis.ai/api/v2";
@@ -18,6 +19,12 @@ pub const IMAGE_EDITING: &str = "/data/media/image-editing";
 pub const TEXT_TO_SPEECH: &str = "/data/media/text-to-speech";
 pub const TEXT_TO_VIDEO: &str = "/data/media/text-to-video";
 pub const IMAGE_TO_VIDEO: &str = "/data/media/image-to-video";
+
+/// Default timeout for requests (30 seconds).
+const REQUEST_TIMEOUT_SECS: u64 = 30;
+
+/// Default connect timeout (10 seconds).
+const CONNECT_TIMEOUT_SECS: u64 = 10;
 
 /// API client for Artificial Analysis.
 pub struct AaClient {
@@ -40,6 +47,8 @@ impl AaClient {
         let http = reqwest::Client::builder()
             .default_headers(headers)
             .user_agent(format!("aa-cli/{}", env!("CARGO_PKG_VERSION")))
+            .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
             .build()?;
 
         let cache = Cache::new()?;

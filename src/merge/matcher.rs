@@ -1,7 +1,15 @@
 //! Model matching algorithm for correlating AA and models.dev data.
 
 use crate::sources::models_dev::models::{ModelsDevModel, ModelsDevProvider};
+use regex::Regex;
 use std::collections::HashMap;
+use std::sync::LazyLock;
+
+/// Pre-compiled regex patterns for version suffix stripping.
+static RE_DATE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-\d{8}$").unwrap());
+static RE_DATE_DASHED: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"-\d{4}-\d{2}-\d{2}$").unwrap());
+static RE_VERSION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-v\d+(\.\d+)*$").unwrap());
 
 /// Result of a model match attempt.
 #[derive(Debug, Clone)]
@@ -49,16 +57,13 @@ pub fn normalize_provider(slug: &str) -> String {
 /// - "gpt-4o-2024-08-06" -> "gpt-4o"
 pub fn strip_version_suffix(slug: &str) -> String {
     // Pattern 1: -YYYYMMDD suffix
-    let re_date = regex::Regex::new(r"-\d{8}$").unwrap();
-    let stripped = re_date.replace(slug, "");
+    let stripped = RE_DATE.replace(slug, "");
 
     // Pattern 2: -YYYY-MM-DD suffix
-    let re_date_dashed = regex::Regex::new(r"-\d{4}-\d{2}-\d{2}$").unwrap();
-    let stripped = re_date_dashed.replace(&stripped, "");
+    let stripped = RE_DATE_DASHED.replace(&stripped, "");
 
     // Pattern 3: -vX.Y.Z version suffix
-    let re_version = regex::Regex::new(r"-v\d+(\.\d+)*$").unwrap();
-    let stripped = re_version.replace(&stripped, "");
+    let stripped = RE_VERSION.replace(&stripped, "");
 
     stripped.to_string()
 }

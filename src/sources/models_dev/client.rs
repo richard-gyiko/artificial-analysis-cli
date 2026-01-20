@@ -2,9 +2,16 @@
 
 use super::models::{flatten_response, ModelsDevResponse, ModelsDevRow};
 use crate::error::{AppError, Result};
+use std::time::Duration;
 
 /// Endpoint for models.dev API.
 pub const MODELS_DEV_API: &str = "https://models.dev/api.json";
+
+/// Default timeout for requests (30 seconds).
+const REQUEST_TIMEOUT_SECS: u64 = 30;
+
+/// Default connect timeout (10 seconds).
+const CONNECT_TIMEOUT_SECS: u64 = 10;
 
 /// Client for fetching data from models.dev.
 pub struct ModelsDevClient {
@@ -16,6 +23,8 @@ impl ModelsDevClient {
     pub fn new() -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent(format!("aa-cli/{}", env!("CARGO_PKG_VERSION")))
+            .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
             .build()?;
 
         Ok(Self { http })

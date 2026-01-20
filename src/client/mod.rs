@@ -52,17 +52,32 @@ impl Client {
     /// Fetch merged LLM models.
     ///
     /// This implements the three-layer cache architecture:
-    /// 1. Fetch/use cached AA data
-    /// 2. Fetch/use cached models.dev data (with 24h TTL)
-    /// 3. Merge and cache the result
+    /// 1. Check if merged cache is valid (both sources cached and not expired)
+    /// 2. Fetch/use cached AA data
+    /// 3. Fetch/use cached models.dev data (with 24h TTL)
+    /// 4. Merge and cache the result
     pub async fn get_llm_models(
         &self,
         refresh: bool,
     ) -> Result<(Vec<LlmModel>, Option<QuotaInfo>)> {
-        // Check if we can use the cached merged view
         let merged_path = self.cache.parquet_path("llms");
         let aa_path = self.cache.parquet_path("aa_llms");
         let md_path = self.cache.parquet_path("models_dev");
+        let meta_path = self.models_dev_meta_path();
+
+        // Quick path: if not refreshing and all caches exist and models.dev not expired,
+        // we can skip fetching entirely and just load merged cache
+        if !refresh
+            && merged_path.exists()
+            && aa_path.exists()
+            && md_path.exists()
+            && !self.is_models_dev_expired(&meta_path)
+        {
+            // Load from merged parquet cache
+            if let Ok(models) = self.load_merged_cache(&merged_path) {
+                return Ok((models, self.get_cached_quota()));
+            }
+        }
 
         // Fetch AA data
         let (aa_models, quota) = self.fetch_aa_llms(refresh).await?;
@@ -93,6 +108,69 @@ impl Client {
         }
 
         Ok((merged, quota))
+    }
+
+    /// Load merged LLM models from parquet cache.
+    fn load_merged_cache(&self, path: &Path) -> Result<Vec<LlmModel>> {
+        use duckdb::Connection;
+
+        let conn = Connection::open_in_memory()
+            .map_err(|e| crate::error::AppError::Cache(format!("DuckDB error: {}", e)))?;
+
+        let path_str = path.to_string_lossy();
+        let mut stmt = conn
+            .prepare(&format!("SELECT * FROM read_parquet('{}')", path_str))
+            .map_err(|e| crate::error::AppError::Cache(format!("DuckDB error: {}", e)))?;
+
+        let models: Vec<LlmModel> = stmt
+            .query_map([], |row| {
+                Ok(LlmModel {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    slug: row.get(2)?,
+                    creator: row.get(3)?,
+                    creator_slug: row.get(4)?,
+                    release_date: row.get(5)?,
+                    intelligence: row.get(6)?,
+                    coding: row.get(7)?,
+                    math: row.get(8)?,
+                    mmlu_pro: row.get(9)?,
+                    gpqa: row.get(10)?,
+                    hle: row.get(11)?,
+                    livecodebench: row.get(12)?,
+                    scicode: row.get(13)?,
+                    math_500: row.get(14)?,
+                    aime: row.get(15)?,
+                    input_price: row.get(16)?,
+                    output_price: row.get(17)?,
+                    price: row.get(18)?,
+                    tps: row.get(19)?,
+                    latency: row.get(20)?,
+                    reasoning: row.get(21)?,
+                    tool_call: row.get(22)?,
+                    structured_output: row.get(23)?,
+                    attachment: row.get(24)?,
+                    temperature: row.get(25)?,
+                    context_window: row.get::<_, Option<i64>>(26)?.map(|v| v as u64),
+                    max_input_tokens: row.get::<_, Option<i64>>(27)?.map(|v| v as u64),
+                    max_output_tokens: row.get::<_, Option<i64>>(28)?.map(|v| v as u64),
+                    input_modalities: row
+                        .get::<_, Option<String>>(29)?
+                        .map(|s| s.split(',').map(String::from).collect()),
+                    output_modalities: row
+                        .get::<_, Option<String>>(30)?
+                        .map(|s| s.split(',').map(String::from).collect()),
+                    knowledge_cutoff: row.get(31)?,
+                    open_weights: row.get(32)?,
+                    last_updated: row.get(33)?,
+                    models_dev_matched: row.get(34)?,
+                })
+            })
+            .map_err(|e| crate::error::AppError::Cache(format!("DuckDB error: {}", e)))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| crate::error::AppError::Cache(format!("DuckDB error: {}", e)))?;
+
+        Ok(models)
     }
 
     /// Fetch AA LLM models and write to cache.
