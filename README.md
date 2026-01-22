@@ -56,7 +56,41 @@ which-llm profile create default --api-key YOUR_API_KEY
 
 Or set the `ARTIFICIAL_ANALYSIS_API_KEY` environment variable.
 
-## Usage
+## Agent Skill
+
+The [`which-llm`](https://github.com/richard-gyiko/which-llm) skill helps AI coding assistants select the right model for a task, following the [Agent Skills](https://agentskills.io) open standard.
+
+Instead of manually querying benchmarks, an agent can load this skill to:
+
+1. **Classify your task** into a skill type (transformational, analytical, tool-using, agentic)
+2. **Derive requirements** (minimum intelligence/coding scores needed)
+3. **Query and recommend** models that fit your constraints (budget, speed, latency)
+
+### Install Skill
+
+```bash
+# Install for your AI coding tool (project-level)
+which-llm skill install cursor
+which-llm skill install claude
+which-llm skill install opencode
+which-llm skill install codex
+which-llm skill install windsurf
+which-llm skill install copilot
+which-llm skill install antigravity
+
+# Install globally (available in all projects)
+which-llm skill install cursor --global
+
+# List supported tools and paths
+which-llm skill list
+
+# Remove installed skill
+which-llm skill uninstall cursor
+```
+
+See the [skill documentation](skill/SKILL.md) for full details.
+
+## CLI Usage
 
 ### Query LLM Models
 
@@ -217,40 +251,6 @@ which-llm profile default work
 - `-p, --profile <NAME>`: Use a specific profile
 - `--refresh`: Bypass cache and fetch fresh data
 - `-q, --quiet`: Suppress attribution notice (for scripting)
-
-## Agent Skill
-
-The [`which-llm`](https://github.com/richard-gyiko/which-llm) skill helps AI coding assistants select the right model for a task, following the [Agent Skills](https://agentskills.io) open standard.
-
-Instead of manually querying benchmarks, an agent can load this skill to:
-
-1. **Classify your task** into a skill type (transformational, analytical, tool-using, agentic)
-2. **Derive requirements** (minimum intelligence/coding scores needed)
-3. **Query and recommend** models that fit your constraints (budget, speed, latency)
-
-### Install Skill
-
-```bash
-# Install for your AI coding tool (project-level)
-which-llm skill install cursor
-which-llm skill install claude
-which-llm skill install opencode
-which-llm skill install codex
-which-llm skill install windsurf
-which-llm skill install copilot
-which-llm skill install antigravity
-
-# Install globally (available in all projects)
-which-llm skill install cursor --global
-
-# List supported tools and paths
-which-llm skill list
-
-# Remove installed skill
-which-llm skill uninstall cursor
-```
-
-See the [which-llm repository](https://github.com/richard-gyiko/which-llm) for full skill documentation.
 
 ## Attribution
 
