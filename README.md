@@ -88,7 +88,7 @@ which-llm skill list
 which-llm skill uninstall cursor
 ```
 
-See the [skill documentation](skill/SKILL.md) for full details.
+See the [skill documentation](skills/which-llm/SKILL.md) for full details.
 
 ## CLI Usage
 
