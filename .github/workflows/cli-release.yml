@@ -1,9 +1,9 @@
-name: Release
+name: CLI Release
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'cli/v*'
 
 permissions:
   contents: write
@@ -65,7 +65,7 @@ jobs:
 
       - name: Get version
         id: version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: echo "version=${GITHUB_REF#refs/tags/cli/v}" >> $GITHUB_OUTPUT
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4

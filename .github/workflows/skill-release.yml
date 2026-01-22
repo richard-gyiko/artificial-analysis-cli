@@ -1,0 +1,31 @@
+name: Skill Release
+
+on:
+  push:
+    tags:
+      - 'skill/v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/skill/v}" >> $GITHUB_OUTPUT
+
+      - name: Create skill archive
+        run: |
+          zip -r which-llm-skill-${{ steps.version.outputs.version }}.zip skill
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Skill v${{ steps.version.outputs.version }}"
+          generate_release_notes: true
+          files: which-llm-skill-*.zip
