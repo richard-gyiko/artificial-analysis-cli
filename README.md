@@ -1,26 +1,31 @@
 # which-llm
 
-A command-line interface for querying AI model benchmarks from [Artificial Analysis](https://artificialanalysis.ai), enriched with capability metadata from [models.dev](https://models.dev). Helps you decide which LLM to use for your task.
+**Stop guessing which LLM to use.** Get data-driven model recommendations based on your task requirements, budget, and performance needs.
 
-## Installation
+With 100+ LLMs available—each with different strengths, pricing, and capabilities—choosing the right one is overwhelming. `which-llm` queries real benchmark data and gives you actionable recommendations.
 
-### macOS / Linux (Homebrew)
+> **Note:** This tool provides best-effort suggestions based on benchmark scores and capability metadata. It does not substitute proper evaluation on your specific use case. Benchmarks have known limitations and may not reflect real-world performance for your domain.
+
+## Quick Start
+
+The easiest way to use `which-llm` is through the **agent skill**—your AI coding assistant (Cursor, Claude Code, Copilot, etc.) learns how to recommend models for you automatically.
+
+### 1. Install the CLI
 
 ```bash
+# macOS / Linux
 brew tap richard-gyiko/tap
 brew install which-llm
-```
 
-### Windows (Scoop)
-
-```powershell
+# Windows
 scoop bucket add richard-gyiko https://github.com/richard-gyiko/scoop-bucket
 scoop install which-llm
 ```
 
-### Manual Download
+<details>
+<summary>Other installation methods</summary>
 
-Download the latest release from [GitHub Releases](https://github.com/richard-gyiko/which-llm/releases):
+**Manual download** from [GitHub Releases](https://github.com/richard-gyiko/which-llm/releases):
 
 ```bash
 # macOS (Apple Silicon)
@@ -39,16 +44,21 @@ tar -xzf which-llm-x86_64-unknown-linux-gnu.tar.gz
 sudo mv which-llm /usr/local/bin/
 ```
 
-### From Source
+**From source** (requires Rust):
 
 ```bash
 cargo install --path .
 ```
 
-## Setup
+</details>
 
-1. Create an account at [Artificial Analysis](https://artificialanalysis.ai/login) and generate an API key
-2. Create a profile with your API key:
+### 2. Configure API Access
+
+The CLI fetches benchmark data from [Artificial Analysis](https://artificialanalysis.ai), which requires a free API key.
+
+1. Create an account at [artificialanalysis.ai/login](https://artificialanalysis.ai/login)
+2. Generate an API key
+3. Configure the CLI:
 
 ```bash
 which-llm profile create default --api-key YOUR_API_KEY
@@ -56,174 +66,112 @@ which-llm profile create default --api-key YOUR_API_KEY
 
 Or set the `ARTIFICIAL_ANALYSIS_API_KEY` environment variable.
 
-## Agent Skill
-
-The [`which-llm`](https://github.com/richard-gyiko/which-llm) skill helps AI coding assistants select the right model for a task, following the [Agent Skills](https://agentskills.io) open standard.
-
-Instead of manually querying benchmarks, an agent can load this skill to:
-
-1. **Classify your task** into a skill type (transformational, analytical, tool-using, agentic)
-2. **Derive requirements** (minimum intelligence/coding scores needed)
-3. **Query and recommend** models that fit your constraints (budget, speed, latency)
-
-### Install Skill
+### 3. Install the Skill
 
 ```bash
-# Install for your AI coding tool (project-level)
-which-llm skill install cursor
-which-llm skill install claude
-which-llm skill install opencode
-which-llm skill install codex
-which-llm skill install windsurf
-which-llm skill install copilot
-which-llm skill install antigravity
+# Pick your AI coding tool
+which-llm skill install cursor      # Cursor
+which-llm skill install claude      # Claude Code
+which-llm skill install opencode    # OpenCode
+which-llm skill install codex       # Codex CLI
+which-llm skill install windsurf    # Windsurf
+which-llm skill install copilot     # GitHub Copilot
+which-llm skill install antigravity # Antigravity
 
-# Install globally (available in all projects)
+# Or install globally (available in all projects)
 which-llm skill install cursor --global
-
-# List supported tools and paths
-which-llm skill list
-
-# Remove installed skill
-which-llm skill uninstall cursor
 ```
 
-See the [skill documentation](skills/which-llm/SKILL.md) for full details.
+Now just ask your AI assistant: *"Which LLM should I use for [your task]?"*
 
-## CLI Usage
+The skill follows the [Agent Skills](https://agentskills.io) open standard. See the [full skill documentation](skills/which-llm/SKILL.md) for details on how it classifies tasks and selects models.
 
-### Query LLM Models
+## How It Works
+
+The skill teaches your AI assistant to:
+
+1. **Classify your task** — Is it transformational (summarize, extract), analytical (compare, justify), tool-using (API calls), or agentic (planning, orchestration)?
+2. **Derive requirements** — Map task complexity to minimum benchmark thresholds
+3. **Query real data** — Filter models by capability (tool calling, context window, structured output)
+4. **Recommend Primary + Fallback** — Suggest a cost-optimized cascade (cheap model first, escalate when needed)
+
+Data sources:
+- **[Artificial Analysis](https://artificialanalysis.ai)** — Benchmark scores (intelligence, coding, math) and performance metrics (price, latency, throughput)
+- **[models.dev](https://models.dev)** — Capability metadata (context window, tool calling, structured output, reasoning)
+
+## CLI Reference
+
+For power users, scripting, or debugging, you can query the data directly.
+
+### Basic Queries
 
 ```bash
-# List all LLM models (default: markdown table)
+# List all LLM models
 which-llm llms
 
-# Filter by creator and sort by intelligence
+# Filter and sort
 which-llm llms --creator openai --sort intelligence
 
-# Output as JSON for scripting
+# Output formats: --json, --csv, --table, --plain
 which-llm llms --json
-
-# Output as CSV
-which-llm llms --csv
-```
-
-### Query Media Models
-
-```bash
-# Text-to-image rankings
-which-llm text-to-image
-
-# With category breakdown
-which-llm text-to-image --categories
-
-# Other media endpoints
-which-llm image-editing
-which-llm text-to-speech
-which-llm text-to-video
-which-llm image-to-video
 ```
 
 ### SQL Queries
 
-Use SQL to filter, sort, and aggregate cached data with full expressiveness:
+Use full SQL expressiveness on the cached benchmark data:
 
 ```bash
-# Best coding models under $5/M output price
+# Best coding models under $5/M
 which-llm query "SELECT name, creator, coding, output_price FROM llms WHERE coding > 40 AND output_price < 5 ORDER BY coding DESC"
 
-# Fastest models with good intelligence
-which-llm query "SELECT name, intelligence, tps FROM llms WHERE intelligence > 35 AND tps > 100 ORDER BY tps DESC LIMIT 10"
+# Models with tool calling and large context
+which-llm query "SELECT name, context_window, tool_call FROM llms WHERE tool_call = true AND context_window > 100000"
 
-# Compare creators by average intelligence
-which-llm query "SELECT creator, COUNT(*) as models, ROUND(AVG(intelligence), 1) as avg_intel FROM llms WHERE intelligence IS NOT NULL GROUP BY creator ORDER BY avg_intel DESC"
-
-# Top image generation models
-which-llm query "SELECT name, creator, elo, rank FROM text_to_image WHERE elo > 1200 ORDER BY elo DESC"
-
-# Models with tool calling and large context windows
-which-llm query "SELECT name, creator, context_window, tool_call FROM llms WHERE tool_call = true AND context_window > 100000 ORDER BY context_window DESC"
-
-# Reasoning models with their capabilities
-which-llm query "SELECT name, creator, intelligence, reasoning, context_window FROM llms WHERE reasoning = true ORDER BY intelligence DESC LIMIT 10"
-
-# List available tables and their schemas
+# List available tables
 which-llm query --tables
 ```
 
-#### Available Tables
+<details>
+<summary>Available tables and columns</summary>
 
-| Table | Source Command |
-|-------|----------------|
-| `llms` | `which-llm llms` |
-| `text_to_image` | `which-llm text-to-image` |
-| `image_editing` | `which-llm image-editing` |
-| `text_to_speech` | `which-llm text-to-speech` |
-| `text_to_video` | `which-llm text-to-video` |
-| `image_to_video` | `which-llm image-to-video` |
+#### Tables
 
-#### LLMs Table Columns
+| Table | Description |
+|-------|-------------|
+| `llms` | LLM models with benchmarks and capabilities |
+| `text_to_image` | Text-to-image models |
+| `image_editing` | Image editing models |
+| `text_to_speech` | Text-to-speech models |
+| `text_to_video` | Text-to-video models |
+| `image_to_video` | Image-to-video models |
 
-**Core Fields (from Artificial Analysis)**
+#### LLMs Table — Core Fields
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `id` | VARCHAR | Model ID |
 | `name` | VARCHAR | Model name |
-| `slug` | VARCHAR | URL slug |
-| `creator` | VARCHAR | Creator name |
-| `creator_slug` | VARCHAR | Creator slug |
-| `release_date` | VARCHAR | Release date |
+| `creator` | VARCHAR | Creator (OpenAI, Anthropic, etc.) |
 | `intelligence` | DOUBLE | Intelligence index |
 | `coding` | DOUBLE | Coding index |
 | `math` | DOUBLE | Math index |
-| `mmlu_pro` | DOUBLE | MMLU-Pro score |
-| `gpqa` | DOUBLE | GPQA score |
-| `hle` | DOUBLE | HLE score |
-| `livecodebench` | DOUBLE | LiveCodeBench score |
-| `scicode` | DOUBLE | SciCode score |
-| `math_500` | DOUBLE | MATH-500 score |
-| `aime` | DOUBLE | AIME score |
-| `input_price` | DOUBLE | Input price per 1M tokens |
-| `output_price` | DOUBLE | Output price per 1M tokens |
-| `price` | DOUBLE | Blended price (3:1 ratio) |
+| `input_price` | DOUBLE | Price per 1M input tokens |
+| `output_price` | DOUBLE | Price per 1M output tokens |
 | `tps` | DOUBLE | Tokens per second |
 | `latency` | DOUBLE | Time to first token (seconds) |
 
-**Capability Fields (enriched from [models.dev](https://models.dev))**
+#### LLMs Table — Capability Fields
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `reasoning` | BOOLEAN | Supports chain-of-thought reasoning |
-| `tool_call` | BOOLEAN | Supports function/tool calling |
-| `structured_output` | BOOLEAN | Supports structured JSON output |
-| `attachment` | BOOLEAN | Supports file attachments |
-| `temperature` | BOOLEAN | Supports temperature parameter |
-| `context_window` | BIGINT | Maximum context window (tokens) |
-| `max_input_tokens` | BIGINT | Maximum input tokens |
-| `max_output_tokens` | BIGINT | Maximum output tokens |
-| `input_modalities` | VARCHAR | Input types (e.g., "text,image") |
-| `output_modalities` | VARCHAR | Output types (e.g., "text") |
-| `knowledge_cutoff` | VARCHAR | Training data cutoff date |
-| `open_weights` | BOOLEAN | Model weights are publicly available |
-| `last_updated` | VARCHAR | Last update date |
-| `models_dev_matched` | BOOLEAN | Whether model was matched to models.dev |
+| `context_window` | BIGINT | Maximum context window |
+| `tool_call` | BOOLEAN | Supports function calling |
+| `structured_output` | BOOLEAN | Supports JSON mode |
+| `reasoning` | BOOLEAN | Chain-of-thought model |
+| `open_weights` | BOOLEAN | Weights publicly available |
 
-> **Note:** Capability fields are `NULL` for models not matched to models.dev (~53% of models). Use `models_dev_matched = true` to filter for models with full capability data.
+> **Note:** Capability fields are `NULL` for ~47% of models not matched to models.dev. Use `models_dev_matched = true` to filter for complete data.
 
-#### Media Tables Columns
-
-All media tables (`text_to_image`, `image_editing`, etc.) share this schema:
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | VARCHAR | Model ID |
-| `name` | VARCHAR | Model name |
-| `slug` | VARCHAR | URL slug |
-| `creator` | VARCHAR | Creator name |
-| `elo` | DOUBLE | ELO score |
-| `rank` | INTEGER | Rank |
-| `release_date` | VARCHAR | Release date |
+</details>
 
 ### Other Commands
 
@@ -236,28 +184,18 @@ which-llm cache clear
 which-llm profile list
 which-llm profile create work --api-key KEY
 which-llm profile default work
+
+# Skill management
+which-llm skill list
+which-llm skill uninstall cursor
 ```
-
-### Output Formats
-
-- **Markdown** (default): AI-agent friendly tables
-- `--json`: Full JSON response
-- `--csv`: CSV format
-- `--table`: ASCII table
-- `--plain`: Tab-separated values
-
-### Options
-
-- `-p, --profile <NAME>`: Use a specific profile
-- `--refresh`: Bypass cache and fetch fresh data
-- `-q, --quiet`: Suppress attribution notice (for scripting)
 
 ## Attribution
 
 - Benchmark data provided by [Artificial Analysis](https://artificialanalysis.ai)
 - Capability metadata provided by [models.dev](https://models.dev)
 
-This CLI uses the [Artificial Analysis API](https://artificialanalysis.ai/documentation). Per the API terms, attribution is required for all use of the data.
+This tool uses the [Artificial Analysis API](https://artificialanalysis.ai/documentation). Per the API terms, attribution is required for all use of the data.
 
 ## License
 
