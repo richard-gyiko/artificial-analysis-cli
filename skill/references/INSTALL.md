@@ -28,21 +28,21 @@ scoop install which-llm
 
 ### Manual Download
 
-Download from [GitHub Releases](https://github.com/richard-gyiko/which-llm-cli/releases):
+Download from [GitHub Releases](https://github.com/richard-gyiko/which-llm/releases):
 
 ```bash
 # macOS (Apple Silicon)
-curl -LO https://github.com/richard-gyiko/which-llm-cli/releases/latest/download/which-llm-aarch64-apple-darwin.tar.gz
+curl -LO https://github.com/richard-gyiko/which-llm/releases/latest/download/which-llm-aarch64-apple-darwin.tar.gz
 tar -xzf which-llm-aarch64-apple-darwin.tar.gz
 sudo mv which-llm /usr/local/bin/
 
 # macOS (Intel)
-curl -LO https://github.com/richard-gyiko/which-llm-cli/releases/latest/download/which-llm-x86_64-apple-darwin.tar.gz
+curl -LO https://github.com/richard-gyiko/which-llm/releases/latest/download/which-llm-x86_64-apple-darwin.tar.gz
 tar -xzf which-llm-x86_64-apple-darwin.tar.gz
 sudo mv which-llm /usr/local/bin/
 
 # Linux
-curl -LO https://github.com/richard-gyiko/which-llm-cli/releases/latest/download/which-llm-x86_64-unknown-linux-gnu.tar.gz
+curl -LO https://github.com/richard-gyiko/which-llm/releases/latest/download/which-llm-x86_64-unknown-linux-gnu.tar.gz
 tar -xzf which-llm-x86_64-unknown-linux-gnu.tar.gz
 sudo mv which-llm /usr/local/bin/
 ```
@@ -50,8 +50,8 @@ sudo mv which-llm /usr/local/bin/
 ### From Source (requires Rust)
 
 ```bash
-git clone https://github.com/richard-gyiko/which-llm-cli.git
-cd which-llm-cli
+git clone https://github.com/richard-gyiko/which-llm.git
+cd which-llm
 cargo install --path .
 ```
 
