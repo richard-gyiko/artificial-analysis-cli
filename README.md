@@ -99,6 +99,73 @@ Data sources:
 - **[Artificial Analysis](https://artificialanalysis.ai)** — Benchmark scores (intelligence, coding, math) and performance metrics (price, latency, throughput)
 - **[models.dev](https://models.dev)** — Capability metadata (context window, tool calling, structured output, reasoning)
 
+## Example
+
+**You:** *"I need to build an agent that calls external APIs and processes the results. Budget is important—we'll be making lots of requests."*
+
+**Assistant (with skill loaded):**
+
+> ### Task Analysis
+> - **Type:** Tool-using (API calls, function execution)
+> - **Requirements:** `tool_call = true`, good coding score, cost-efficient
+> 
+> ### Recommendations
+> 
+> | Role | Model | Price | Why |
+> |------|-------|-------|-----|
+> | **Primary** | GPT-4o-mini | $0.60/M | Reliable tool calling, lowest cost in class |
+> | **Fallback** | Claude 3.5 Sonnet | $9.00/M | Higher reasoning for complex orchestration |
+> 
+> ### Cost Estimate
+> With 80% primary / 20% fallback: **$2.28/M tokens** (75% savings vs always using fallback)
+> 
+> ### Alternatives Considered
+> - *Gemini 1.5 Flash* — Cheaper but less reliable tool calling in practice
+> - *DeepSeek V3* — Great value but higher latency for real-time use
+
+<details>
+<summary>More examples</summary>
+
+---
+
+**You:** *"Which model should I use for summarizing customer support tickets? We process ~10k tickets/day."*
+
+**Assistant:**
+
+> ### Task Analysis
+> - **Type:** Transformational (summarization)
+> - **Requirements:** Basic intelligence, high throughput, very low cost
+> 
+> ### Recommendations
+> 
+> | Role | Model | Price | Why |
+> |------|-------|-------|-----|
+> | **Primary** | Gemini 1.5 Flash | $0.15/M | Fastest, cheapest for simple transforms |
+> | **Fallback** | GPT-4o-mini | $0.60/M | Better quality for edge cases |
+> 
+> At 10k tickets/day (~2M tokens), estimated cost: **$9-12/day**
+
+---
+
+**You:** *"I need a model for a coding assistant that helps with refactoring. Must support 100k+ context for large files."*
+
+**Assistant:**
+
+> ### Task Analysis
+> - **Type:** Analytical + Tool-using (code understanding, refactoring)
+> - **Requirements:** High coding score, `context_window >= 100k`, `structured_output = true`
+> 
+> ### Recommendations
+> 
+> | Role | Model | Price | Context | Why |
+> |------|-------|-------|---------|-----|
+> | **Primary** | Claude 3.5 Sonnet | $9.00/M | 200k | Best coding benchmarks, excellent at refactoring |
+> | **Fallback** | GPT-4o | $10.00/M | 128k | Strong alternative, slightly different style |
+> 
+> Both models score 45+ on coding index. For cost savings on simpler refactors, consider GPT-4o-mini as a pre-filter.
+
+</details>
+
 ## CLI Reference
 
 For power users, scripting, or debugging, you can query the data directly.
