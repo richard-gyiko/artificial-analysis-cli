@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Unified LLM Model combining AA benchmarks with models.dev capabilities.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LlmModel {
     // === Core Identity (from AA) ===
     pub id: String,

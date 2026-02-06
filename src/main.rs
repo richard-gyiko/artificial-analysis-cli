@@ -194,6 +194,30 @@ async fn run_with_hosted_client(
             commands::media::display_media_models(&models, format, "image_to_video", *categories);
             Some("image_to_video")
         }
+        Commands::Compare { models, verbose } => {
+            let llm_models = client.get_llm_models(cli.refresh).await?;
+            commands::compare::run(&llm_models, models, *verbose, format)?;
+            None
+        }
+        Commands::Cost {
+            models,
+            input,
+            output,
+            requests,
+            period,
+        } => {
+            let llm_models = client.get_llm_models(cli.refresh).await?;
+            commands::cost::run(
+                &llm_models,
+                models,
+                input,
+                output,
+                *requests,
+                period,
+                format,
+            )?;
+            None
+        }
         _ => unreachable!(),
     };
 
@@ -258,6 +282,30 @@ async fn run_with_api_client(
         Commands::ImageToVideo { categories } => {
             commands::media::run_image_to_video(client, cli.refresh, format, *categories).await?;
             Some("image_to_video")
+        }
+        Commands::Compare { models, verbose } => {
+            let llm_models = client.get_llm_models(cli.refresh).await?;
+            commands::compare::run(&llm_models, models, *verbose, format)?;
+            None
+        }
+        Commands::Cost {
+            models,
+            input,
+            output,
+            requests,
+            period,
+        } => {
+            let llm_models = client.get_llm_models(cli.refresh).await?;
+            commands::cost::run(
+                &llm_models,
+                models,
+                input,
+                output,
+                *requests,
+                period,
+                format,
+            )?;
+            None
         }
         _ => unreachable!(),
     };

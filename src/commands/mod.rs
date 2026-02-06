@@ -1,6 +1,8 @@
 //! Command implementations.
 
 pub mod cache;
+pub mod compare;
+pub mod cost;
 pub mod info;
 pub mod llms;
 pub mod media;

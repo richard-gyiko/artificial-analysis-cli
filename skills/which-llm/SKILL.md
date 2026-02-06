@@ -166,6 +166,40 @@ which-llm query "SELECT name, intelligence, tps, latency, price
           ORDER BY tps DESC"
 ```
 
+## Compare Models
+
+Use the `compare` command for side-by-side model comparison with winner highlighting:
+
+```bash
+# Compare candidate models directly
+which-llm compare "gpt-5 (high)" "claude 4.5 sonnet" "gemini 2.5 pro"
+
+# Include additional metrics with --verbose
+which-llm compare "gpt-5" "claude-4.5" --verbose
+
+# Output as JSON for programmatic use
+which-llm compare "gpt-5" "claude-4.5" --json
+```
+
+Winners for each metric are marked with `*`. This is useful when presenting trade-offs to users.
+
+## Calculate Token Costs
+
+Use the `cost` command to estimate costs and project usage:
+
+```bash
+# Calculate cost for a single model
+which-llm cost "gpt-5 (high)" --input 10k --output 5k
+
+# Compare costs across multiple models
+which-llm cost "gpt-5" "claude 4.5" --input 1M --output 500k
+
+# Project daily/monthly costs with request volume
+which-llm cost "gpt-5 (high)" --input 2k --output 1k --requests 1000 --period daily
+```
+
+Token units: `k` (thousands), `M` (millions), `B` (billions). Decimals supported (e.g., `1.5M`).
+
 ## Cascade Recommendations
 
 For cost optimization, recommend a **Primary + Fallback** pair instead of a single model:

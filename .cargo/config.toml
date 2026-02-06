@@ -1,0 +1,20 @@
+# Speed up builds on Windows
+# Use faster linker if available
+
+[target.x86_64-pc-windows-msvc]
+# lld is faster than the default MSVC linker
+# Uncomment if you have lld installed:
+# linker = "lld-link"
+rustflags = ["-C", "link-arg=/DEBUG:NONE"]
+
+[build]
+# Limit parallel build jobs (adjust based on your machine)
+jobs = 8
+
+[net]
+# Use git CLI for fetching (can be faster)
+git-fetch-with-cli = true
+
+# Incremental compilation (usually enabled by default for dev)
+[profile.dev]
+incremental = true
