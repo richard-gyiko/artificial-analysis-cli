@@ -52,9 +52,25 @@ cargo install --path .
 
 </details>
 
-### 2. Configure API Access
+### 2. Start Using It
 
-The CLI fetches benchmark data from [Artificial Analysis](https://artificialanalysis.ai), which requires a free API key.
+**No API key required!** The CLI fetches pre-built benchmark data from GitHub Releases, updated daily.
+
+```bash
+# List all LLM models
+which-llm llms
+
+# Filter by creator
+which-llm llms --creator openai
+
+# Check data source info
+which-llm info
+```
+
+<details>
+<summary>Optional: Configure API access for real-time data</summary>
+
+For the freshest data (instead of daily snapshots), you can configure direct API access to [Artificial Analysis](https://artificialanalysis.ai):
 
 1. Create an account at [artificialanalysis.ai/login](https://artificialanalysis.ai/login)
 2. Generate an API key
@@ -65,6 +81,14 @@ which-llm profile create default --api-key YOUR_API_KEY
 ```
 
 Or set the `ARTIFICIAL_ANALYSIS_API_KEY` environment variable.
+
+Then use the `--use-api` flag to fetch directly from the API:
+
+```bash
+which-llm llms --use-api
+```
+
+</details>
 
 ### 3. Install the Skill
 
@@ -209,11 +233,17 @@ which-llm query --tables
 ### Other Commands
 
 ```bash
+# Force refresh data from GitHub
+which-llm llms --refresh
+
+# View data source and attribution info
+which-llm info
+
 # Manage cache
 which-llm cache status
 which-llm cache clear
 
-# Manage profiles
+# Manage profiles (for API access)
 which-llm profile list
 which-llm profile create work --api-key KEY
 which-llm profile default work
@@ -228,7 +258,17 @@ which-llm skill uninstall cursor
 - Benchmark data provided by [Artificial Analysis](https://artificialanalysis.ai)
 - Capability metadata provided by [models.dev](https://models.dev)
 
-This tool uses the [Artificial Analysis API](https://artificialanalysis.ai/documentation). Per the API terms, attribution is required for all use of the data.
+This tool uses data from the [Artificial Analysis API](https://artificialanalysis.ai/documentation). Per the API terms, attribution is required for all use of the data.
+
+## Data Freshness
+
+The CLI uses pre-built benchmark data hosted on GitHub Releases, updated daily via automated workflows. This means:
+
+- **No API key required** for basic usage
+- Data is typically **less than 24 hours old**
+- Use `which-llm info` to see when data was last updated
+- Use `--refresh` to force a fresh download from GitHub
+- Use `--use-api` with an API key for real-time data
 
 ## License
 

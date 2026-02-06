@@ -1,0 +1,207 @@
+name: Update Data
+
+on:
+  schedule:
+    # Run daily at 6:00 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Allow manual triggering
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  update:
+    name: Fetch and Publish Data
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+      
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ubuntu-latest"
+      
+      - name: Build CLI
+        run: cargo build --release
+      
+      - name: Fetch data from APIs
+        env:
+          ARTIFICIAL_ANALYSIS_API_KEY: ${{ secrets.ARTIFICIAL_ANALYSIS_API_KEY }}
+          WHICH_LLM_CACHE_DIR: ${{ runner.temp }}/which-llm-data
+        run: |
+          set -euo pipefail
+          mkdir -p "$WHICH_LLM_CACHE_DIR"
+          
+          # Fetch critical data type (llms) - fail workflow if this fails
+          ./target/release/which-llm llms --use-api --quiet
+          
+          # Fetch non-critical data types - warn but continue on error
+          ./target/release/which-llm text-to-image --use-api --quiet || echo "Warning: failed to fetch text-to-image data"
+          ./target/release/which-llm image-editing --use-api --quiet || echo "Warning: failed to fetch image-editing data"
+          ./target/release/which-llm text-to-speech --use-api --quiet || echo "Warning: failed to fetch text-to-speech data"
+          ./target/release/which-llm text-to-video --use-api --quiet || echo "Warning: failed to fetch text-to-video data"
+          ./target/release/which-llm image-to-video --use-api --quiet || echo "Warning: failed to fetch image-to-video data"
+          
+          # Verify at least llms.parquet exists
+          echo "Generated parquet files:"
+          ls -la "$WHICH_LLM_CACHE_DIR"/*.parquet
+          if [ ! -f "$WHICH_LLM_CACHE_DIR/llms.parquet" ]; then
+            echo "Error: llms.parquet not found"
+            exit 1
+          fi
+      
+      - name: Generate manifest
+        env:
+          WHICH_LLM_CACHE_DIR: ${{ runner.temp }}/which-llm-data
+        run: |
+          set -euo pipefail
+          cd "$WHICH_LLM_CACHE_DIR"
+          
+          # Verify parquet files exist before generating manifest
+          if ! ls *.parquet >/dev/null 2>&1; then
+            echo "Error: No parquet files found"
+            exit 1
+          fi
+          
+          # Create manifest with timestamps and file info
+          cat > manifest.json << EOF
+          {
+            "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "version": "1",
+            "source": {
+              "artificial_analysis": "https://artificialanalysis.ai",
+              "models_dev": "https://models.dev"
+            },
+            "files": {
+          EOF
+          
+          # Add file info for each parquet file
+          first=true
+          for f in *.parquet; do
+            if [ -f "$f" ]; then
+              size=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f")
+              checksum=$(sha256sum "$f" | cut -d' ' -f1)
+              if [ "$first" = true ]; then
+                first=false
+              else
+                echo "," >> manifest.json
+              fi
+              printf '    "%s": {"size": %s, "sha256": "%s"}' "$f" "$size" "$checksum" >> manifest.json
+            fi
+          done
+          
+          cat >> manifest.json << EOF
+          
+            },
+            "attribution": {
+              "text": "Data provided by Artificial Analysis (https://artificialanalysis.ai) and models.dev (https://models.dev)",
+              "url": "https://artificialanalysis.ai"
+            }
+          }
+          EOF
+          
+          echo "Generated manifest:"
+          cat manifest.json
+      
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WHICH_LLM_CACHE_DIR: ${{ runner.temp }}/which-llm-data
+        run: |
+          cd $WHICH_LLM_CACHE_DIR
+          
+          # Check if data/latest release exists
+          if gh release view data/latest --repo ${{ github.repository }} > /dev/null 2>&1; then
+            echo "Updating existing release..."
+            # Delete existing assets
+            for asset in $(gh release view data/latest --repo ${{ github.repository }} --json assets -q '.assets[].name'); do
+              gh release delete-asset data/latest "$asset" --repo ${{ github.repository }} --yes || true
+            done
+            
+            # Upload new assets
+            gh release upload data/latest *.parquet manifest.json --repo ${{ github.repository }} --clobber
+            
+            # Update release notes
+            gh release edit data/latest \
+              --repo ${{ github.repository }} \
+              --title "Latest Data" \
+              --notes "Pre-built benchmark data for which-llm CLI.
+
+          **Last updated:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          This release is automatically updated daily with fresh data from:
+          - [Artificial Analysis](https://artificialanalysis.ai) - Benchmarks, pricing, performance
+          - [models.dev](https://models.dev) - Capabilities, limits, modalities
+
+          ## Usage
+
+          The which-llm CLI automatically fetches this data. No API key required!
+
+          \`\`\`bash
+          which-llm llms
+          \`\`\`
+
+          ## Attribution
+
+          Data provided by [Artificial Analysis](https://artificialanalysis.ai).
+          Capability data from [models.dev](https://models.dev)."
+          else
+            echo "Creating new release..."
+            gh release create data/latest \
+              --repo ${{ github.repository }} \
+              --title "Latest Data" \
+              --notes "Pre-built benchmark data for which-llm CLI.
+
+          **Last updated:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          This release is automatically updated daily with fresh data from:
+          - [Artificial Analysis](https://artificialanalysis.ai) - Benchmarks, pricing, performance
+          - [models.dev](https://models.dev) - Capabilities, limits, modalities
+
+          ## Usage
+
+          The which-llm CLI automatically fetches this data. No API key required!
+
+          \`\`\`bash
+          which-llm llms
+          \`\`\`
+
+          ## Attribution
+
+          Data provided by [Artificial Analysis](https://artificialanalysis.ai).
+          Capability data from [models.dev](https://models.dev)." \
+              --latest=false \
+              *.parquet manifest.json
+          fi
+      
+      - name: Create dated release (for history)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WHICH_LLM_CACHE_DIR: ${{ runner.temp }}/which-llm-data
+        run: |
+          cd $WHICH_LLM_CACHE_DIR
+          
+          DATE_TAG="data/$(date -u +%Y-%m-%d)"
+          
+          # Only create if it doesn't exist (avoid duplicates on re-runs)
+          if ! gh release view "$DATE_TAG" --repo ${{ github.repository }} > /dev/null 2>&1; then
+            echo "Creating dated release: $DATE_TAG"
+            gh release create "$DATE_TAG" \
+              --repo ${{ github.repository }} \
+              --title "Data $(date -u +%Y-%m-%d)" \
+              --notes "Historical snapshot of benchmark data.
+
+          Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          Data provided by [Artificial Analysis](https://artificialanalysis.ai).
+          Capability data from [models.dev](https://models.dev)." \
+              --latest=false \
+              *.parquet manifest.json
+          else
+            echo "Dated release $DATE_TAG already exists, skipping"
+          fi

@@ -65,13 +65,26 @@ fn test_cache_status() {
 }
 
 #[test]
-fn test_llms_requires_api_key() {
+fn test_llms_api_mode_requires_api_key() {
+    let temp = tempfile::tempdir().unwrap();
+    cmd_with_temp_config(&temp)
+        .arg("llms")
+        .arg("--use-api")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("No API key configured"));
+}
+
+#[test]
+fn test_llms_hosted_fallback_error() {
+    // When hosted data is not available, CLI should try hosted data first
+    // and fail with a network error (since data/latest release doesn't exist)
     let temp = tempfile::tempdir().unwrap();
     cmd_with_temp_config(&temp)
         .arg("llms")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("No API key configured"));
+        .stderr(predicate::str::contains("Network error").or(predicate::str::contains("HTTP 404")));
 }
 
 #[test]

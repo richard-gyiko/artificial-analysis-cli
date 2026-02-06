@@ -1,6 +1,6 @@
 //! LLM models command.
 
-use crate::client::Client;
+use crate::client::{Client, HostedDataClient};
 use crate::error::Result;
 use crate::models::LlmModel;
 use crate::output::{format_output, Formattable, OutputFormat};
@@ -121,6 +121,123 @@ impl From<&LlmModel> for LlmRow {
 /// Run the LLM models command.
 pub async fn run(
     client: &Client,
+    refresh: bool,
+    format: OutputFormat,
+    model_filter: Option<&str>,
+    creator_filter: Option<&str>,
+    sort_by: Option<&str>,
+    capability_filters: CapabilityFilters,
+) -> Result<()> {
+    let mut models = client.get_llm_models(refresh).await?;
+
+    // Apply name/slug filters
+    if let Some(slug) = model_filter {
+        models.retain(|m| {
+            m.slug.contains(slug) || m.name.to_lowercase().contains(&slug.to_lowercase())
+        });
+    }
+
+    if let Some(creator) = creator_filter {
+        models.retain(|m| {
+            m.creator_slug.as_deref().unwrap_or("").contains(creator)
+                || m.creator.to_lowercase().contains(&creator.to_lowercase())
+        });
+    }
+
+    // Apply capability filters
+    if capability_filters.reasoning {
+        models.retain(|m| m.reasoning == Some(true));
+    }
+
+    if capability_filters.tool_call {
+        models.retain(|m| m.tool_call == Some(true));
+    }
+
+    if capability_filters.structured_output {
+        models.retain(|m| m.structured_output == Some(true));
+    }
+
+    if capability_filters.attachment {
+        models.retain(|m| m.attachment == Some(true));
+    }
+
+    if let Some(min_ctx) = capability_filters.min_context {
+        models.retain(|m| m.context_window.map(|c| c >= min_ctx).unwrap_or(false));
+    }
+
+    if let Some(ref modality_spec) = capability_filters.modality {
+        // Format: "input:image" or "output:text"
+        let parts: Vec<&str> = modality_spec.split(':').collect();
+        if parts.len() == 2 && !parts[1].is_empty() {
+            let direction = parts[0];
+            let modality = parts[1];
+            match direction {
+                "input" => {
+                    models.retain(|m| m.has_input_modality(modality));
+                }
+                "output" => {
+                    models.retain(|m| m.has_output_modality(modality));
+                }
+                _ => {
+                    eprintln!(
+                        "Unknown modality direction: {}. Use 'input' or 'output'.",
+                        direction
+                    );
+                }
+            }
+        } else {
+            eprintln!("Invalid modality format. Use 'input:<type>' or 'output:<type>'.");
+        }
+    }
+
+    // Apply sorting
+    if let Some(field) = sort_by {
+        match field.to_lowercase().as_str() {
+            "intelligence" | "intel" => {
+                models.sort_by(|a, b| {
+                    b.intelligence
+                        .partial_cmp(&a.intelligence)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
+            "price" | "input" => {
+                models.sort_by(|a, b| {
+                    a.input_price
+                        .partial_cmp(&b.input_price)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
+            "speed" | "tps" => {
+                models.sort_by(|a, b| {
+                    b.tps
+                        .partial_cmp(&a.tps)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
+            "context" => {
+                models.sort_by(|a, b| b.context_window.cmp(&a.context_window));
+            }
+            _ => {
+                eprintln!("Unknown sort field: {}. Using default order.", field);
+            }
+        }
+    }
+
+    // Format output
+    if format == OutputFormat::Json {
+        // For JSON, output the raw models
+        println!("{}", crate::output::json::format_json(&models));
+    } else {
+        let rows: Vec<LlmRow> = models.iter().map(LlmRow::from).collect();
+        println!("{}", format_output(&rows, format));
+    }
+
+    Ok(())
+}
+
+/// Run the LLM models command using hosted data.
+pub async fn run_hosted(
+    client: &HostedDataClient,
     refresh: bool,
     format: OutputFormat,
     model_filter: Option<&str>,

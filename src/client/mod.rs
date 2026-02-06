@@ -1,10 +1,15 @@
 //! Unified API client for fetching and merging data from multiple sources.
+//!
+//! This module provides two client types:
+//! - `HostedDataClient`: Uses pre-built data from GitHub Releases (no API key needed)
+//! - `Client`: Uses direct API access (requires API key)
 
 use crate::cache::Cache;
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::merge::merge_models;
 use crate::models::{LlmModel, MediaModel};
 use crate::parquet;
+use crate::remote::RemoteDataClient;
 use crate::sources::artificial_analysis::models::{AaLlmModel, AaLlmRow};
 use crate::sources::artificial_analysis::AaClient;
 use crate::sources::models_dev::models::{flatten_response, ModelsDevResponse, ModelsDevRow};
@@ -14,15 +19,209 @@ use duckdb::Connection;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Unified client that fetches from both AA and models.dev.
+/// TTL for models.dev cache (24 hours).
+const MODELS_DEV_TTL_HOURS: i64 = 24;
+
+/// Client for fetching data using hosted GitHub Releases.
+/// This is the default mode that requires no API key.
+pub struct HostedDataClient {
+    remote: RemoteDataClient,
+    cache: Cache,
+}
+
+impl HostedDataClient {
+    /// Create a new hosted data client.
+    pub fn new() -> Result<Self> {
+        let cache = Cache::new()?;
+        let remote = RemoteDataClient::new(cache.base_dir().to_path_buf())?;
+        Ok(Self { remote, cache })
+    }
+
+    /// Get the cache instance.
+    pub fn cache(&self) -> &Cache {
+        &self.cache
+    }
+
+    /// Get the remote client for manifest access.
+    pub fn remote(&self) -> &RemoteDataClient {
+        &self.remote
+    }
+
+    /// Fetch LLM models from hosted data.
+    pub async fn get_llm_models(&self, refresh: bool) -> Result<Vec<LlmModel>> {
+        // Ensure we have the data
+        let parquet_path = self.remote.ensure_parquet("llms", refresh).await?;
+
+        // Load from parquet
+        self.load_llms_from_parquet(&parquet_path)
+    }
+
+    /// Load LLM models from a parquet file.
+    fn load_llms_from_parquet(&self, path: &Path) -> Result<Vec<LlmModel>> {
+        let conn = Connection::open_in_memory()
+            .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
+
+        let path_str = path.to_string_lossy();
+        let sql = format!(
+            r#"SELECT
+                id, name, slug, creator, creator_slug, release_date,
+                intelligence, coding, math, mmlu_pro, gpqa, hle,
+                livecodebench, scicode, math_500, aime,
+                input_price, output_price, price, tps, latency,
+                reasoning, tool_call, structured_output, attachment, temperature,
+                context_window, max_input_tokens, max_output_tokens,
+                input_modalities, output_modalities,
+                knowledge_cutoff, open_weights, last_updated, models_dev_matched
+            FROM read_parquet('{}')"#,
+            path_str
+        );
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
+
+        let models: Vec<LlmModel> = stmt
+            .query_map([], |row| {
+                Ok(LlmModel {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    slug: row.get(2)?,
+                    creator: row.get(3)?,
+                    creator_slug: row.get(4)?,
+                    release_date: row.get(5)?,
+                    intelligence: row.get(6)?,
+                    coding: row.get(7)?,
+                    math: row.get(8)?,
+                    mmlu_pro: row.get(9)?,
+                    gpqa: row.get(10)?,
+                    hle: row.get(11)?,
+                    livecodebench: row.get(12)?,
+                    scicode: row.get(13)?,
+                    math_500: row.get(14)?,
+                    aime: row.get(15)?,
+                    input_price: row.get(16)?,
+                    output_price: row.get(17)?,
+                    price: row.get(18)?,
+                    tps: row.get(19)?,
+                    latency: row.get(20)?,
+                    reasoning: row.get(21)?,
+                    tool_call: row.get(22)?,
+                    structured_output: row.get(23)?,
+                    attachment: row.get(24)?,
+                    temperature: row.get(25)?,
+                    context_window: row.get::<_, Option<i64>>(26)?.map(|v| v as u64),
+                    max_input_tokens: row.get::<_, Option<i64>>(27)?.map(|v| v as u64),
+                    max_output_tokens: row.get::<_, Option<i64>>(28)?.map(|v| v as u64),
+                    input_modalities: row
+                        .get::<_, Option<String>>(29)?
+                        .map(|s| s.split(',').map(String::from).collect()),
+                    output_modalities: row
+                        .get::<_, Option<String>>(30)?
+                        .map(|s| s.split(',').map(String::from).collect()),
+                    knowledge_cutoff: row.get(31)?,
+                    open_weights: row.get(32)?,
+                    last_updated: row.get(33)?,
+                    models_dev_matched: row.get(34)?,
+                })
+            })
+            .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
+
+        Ok(models)
+    }
+
+    /// Load media models from a parquet file.
+    fn load_media_from_parquet(&self, path: &Path) -> Result<Vec<MediaModel>> {
+        use crate::models::media::MediaCreator;
+
+        let conn = Connection::open_in_memory()
+            .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
+
+        let path_str = path.to_string_lossy();
+        let sql = format!(
+            r#"SELECT
+                id, name, slug, creator,
+                elo, rank, release_date
+            FROM read_parquet('{}')"#,
+            path_str
+        );
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
+
+        let models: Vec<MediaModel> = stmt
+            .query_map([], |row| {
+                let creator_name: String = row.get(3)?;
+                Ok(MediaModel {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    slug: row.get(2)?,
+                    model_creator: MediaCreator {
+                        id: String::new(),
+                        name: creator_name,
+                        slug: None,
+                        extra: serde_json::Value::Null,
+                    },
+                    elo: row.get(4)?,
+                    rank: row.get::<_, Option<i32>>(5)?.map(|r| r as u32),
+                    ci95: None,
+                    appearances: None,
+                    release_date: row.get(6)?,
+                    categories: None,
+                    extra: serde_json::Value::Null,
+                })
+            })
+            .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
+
+        Ok(models)
+    }
+
+    /// Fetch text-to-image models from hosted data.
+    pub async fn get_text_to_image(&self, refresh: bool) -> Result<Vec<MediaModel>> {
+        let parquet_path = self.remote.ensure_parquet("text_to_image", refresh).await?;
+        self.load_media_from_parquet(&parquet_path)
+    }
+
+    /// Fetch image-editing models from hosted data.
+    pub async fn get_image_editing(&self, refresh: bool) -> Result<Vec<MediaModel>> {
+        let parquet_path = self.remote.ensure_parquet("image_editing", refresh).await?;
+        self.load_media_from_parquet(&parquet_path)
+    }
+
+    /// Fetch text-to-speech models from hosted data.
+    pub async fn get_text_to_speech(&self, refresh: bool) -> Result<Vec<MediaModel>> {
+        let parquet_path = self
+            .remote
+            .ensure_parquet("text_to_speech", refresh)
+            .await?;
+        self.load_media_from_parquet(&parquet_path)
+    }
+
+    /// Fetch text-to-video models from hosted data.
+    pub async fn get_text_to_video(&self, refresh: bool) -> Result<Vec<MediaModel>> {
+        let parquet_path = self.remote.ensure_parquet("text_to_video", refresh).await?;
+        self.load_media_from_parquet(&parquet_path)
+    }
+
+    /// Fetch image-to-video models from hosted data.
+    pub async fn get_image_to_video(&self, refresh: bool) -> Result<Vec<MediaModel>> {
+        let parquet_path = self
+            .remote
+            .ensure_parquet("image_to_video", refresh)
+            .await?;
+        self.load_media_from_parquet(&parquet_path)
+    }
+}
+
+/// Unified client that fetches from both AA and models.dev APIs.
+/// Requires an API key for Artificial Analysis.
 pub struct Client {
     aa_client: AaClient,
     md_client: ModelsDevClient,
     cache: Cache,
 }
-
-/// TTL for models.dev cache (24 hours).
-const MODELS_DEV_TTL_HOURS: i64 = 24;
 
 impl Client {
     /// Create a new unified client.

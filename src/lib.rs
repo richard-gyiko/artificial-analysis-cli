@@ -11,6 +11,7 @@ pub mod models;
 pub mod output;
 pub mod parquet;
 pub mod query;
+pub mod remote;
 pub mod schema;
 pub mod sources;
 

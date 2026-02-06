@@ -3,11 +3,15 @@
 use clap::Parser;
 use which_llm::{
     cli::{CacheCommands, Cli, Commands, ProfileCommands, SkillCommands},
-    client::Client,
+    client::{Client, HostedDataClient},
     commands::{self, llms::CapabilityFilters},
     config::Config,
     error::Result,
 };
+
+/// Attribution text for Artificial Analysis.
+const ATTRIBUTION: &str = "Data provided by Artificial Analysis (https://artificialanalysis.ai)";
+const MODELS_DEV_ATTRIBUTION: &str = "Capability data from models.dev (https://models.dev)";
 
 #[tokio::main]
 async fn main() {
@@ -21,7 +25,7 @@ async fn run() -> Result<()> {
     let cli = Cli::parse();
     let format = cli.output_format();
 
-    // Handle commands that don't need API access
+    // Handle commands that don't need data access
     match &cli.command {
         Commands::Profile { command } => {
             return match command {
@@ -57,22 +61,151 @@ async fn run() -> Result<()> {
                 SkillCommands::List => commands::skill::list(),
             };
         }
+        Commands::Info => {
+            return commands::info::run();
+        }
         _ => {}
     }
 
-    // Load config and get API key
-    let config = Config::load()?;
-    let api_key = config.get_api_key(cli.profile.as_deref())?;
-    let profile_name = cli
-        .profile
-        .clone()
-        .or(config.default_profile.clone())
-        .unwrap_or_else(|| "default".into());
+    // Determine data source: API if --use-api flag or if we need to try API as fallback
+    let use_api = cli.use_api;
 
-    // Create client
-    let client = Client::new(api_key, profile_name)?;
+    // Handle commands that need data access
+    let show_hint = if use_api {
+        // Use direct API access (requires API key)
+        let config = Config::load()?;
+        let api_key = config.get_api_key(cli.profile.as_deref())?;
+        let profile_name = cli
+            .profile
+            .clone()
+            .or(config.default_profile.clone())
+            .unwrap_or_else(|| "default".into());
 
-    // Handle commands that need API access
+        let client = Client::new(api_key, profile_name)?;
+        run_with_api_client(&cli, &client, format).await?
+    } else {
+        // Use hosted data (default, no API key needed)
+        let hosted_client = HostedDataClient::new()?;
+        match run_with_hosted_client(&cli, &hosted_client, format).await {
+            Ok(hint) => hint,
+            Err(e) => {
+                // Fallback to API if hosted data fails and API key is available
+                let config = Config::load()?;
+                if let Ok(api_key) = config.get_api_key(cli.profile.as_deref()) {
+                    eprintln!(
+                        "Warning: Could not fetch hosted data ({}). Falling back to API.",
+                        e
+                    );
+                    let profile_name = cli
+                        .profile
+                        .clone()
+                        .or(config.default_profile.clone())
+                        .unwrap_or_else(|| "default".into());
+                    let client = Client::new(api_key, profile_name)?;
+                    run_with_api_client(&cli, &client, format).await?
+                } else {
+                    // No API key and hosted data failed
+                    return Err(e);
+                }
+            }
+        }
+    };
+
+    // Print attribution (required by API terms) unless --quiet
+    if !cli.quiet {
+        println!();
+        println!("{}", ATTRIBUTION);
+        println!("{}", MODELS_DEV_ATTRIBUTION);
+
+        // Show hint about which-llm query for advanced filtering
+        if let Some(table) = show_hint {
+            println!();
+            println!(
+                "Tip: Use 'which-llm query \"SELECT * FROM {} WHERE ...\"' for advanced filtering",
+                table
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Run data commands using the hosted data client.
+async fn run_with_hosted_client(
+    cli: &Cli,
+    client: &HostedDataClient,
+    format: which_llm::output::OutputFormat,
+) -> Result<Option<&'static str>> {
+    let show_hint = match &cli.command {
+        Commands::Llms {
+            model,
+            creator,
+            sort,
+            reasoning,
+            tool_call,
+            structured_output,
+            attachment,
+            min_context,
+            modality,
+        } => {
+            let capability_filters = CapabilityFilters {
+                reasoning: *reasoning,
+                tool_call: *tool_call,
+                structured_output: *structured_output,
+                attachment: *attachment,
+                min_context: *min_context,
+                modality: modality.clone(),
+            };
+
+            commands::llms::run_hosted(
+                client,
+                cli.refresh,
+                format,
+                model.as_deref(),
+                creator.as_deref(),
+                sort.as_deref(),
+                capability_filters,
+            )
+            .await?;
+            Some("llms")
+        }
+        Commands::TextToImage { categories } => {
+            let models = client.get_text_to_image(cli.refresh).await?;
+            commands::media::display_media_models(&models, format, "text_to_image", *categories);
+            Some("text_to_image")
+        }
+        Commands::ImageEditing => {
+            let models = client.get_image_editing(cli.refresh).await?;
+            commands::media::display_media_models(&models, format, "image_editing", false);
+            Some("image_editing")
+        }
+        Commands::TextToSpeech => {
+            let models = client.get_text_to_speech(cli.refresh).await?;
+            commands::media::display_media_models(&models, format, "text_to_speech", false);
+            Some("text_to_speech")
+        }
+        Commands::TextToVideo { categories } => {
+            let models = client.get_text_to_video(cli.refresh).await?;
+            commands::media::display_media_models(&models, format, "text_to_video", *categories);
+            Some("text_to_video")
+        }
+        Commands::ImageToVideo { categories } => {
+            let models = client.get_image_to_video(cli.refresh).await?;
+            commands::media::display_media_models(&models, format, "image_to_video", *categories);
+            Some("image_to_video")
+        }
+        _ => unreachable!(),
+    };
+
+    Ok(show_hint)
+}
+
+/// Run data commands using the API client.
+async fn run_with_api_client(
+    cli: &Cli,
+    client: &Client,
+    format: which_llm::output::OutputFormat,
+) -> Result<Option<&'static str>> {
     let show_hint = match &cli.command {
         Commands::Llms {
             model,
@@ -95,7 +228,7 @@ async fn run() -> Result<()> {
             };
 
             commands::llms::run(
-                &client,
+                client,
                 cli.refresh,
                 format,
                 model.as_deref(),
@@ -107,49 +240,27 @@ async fn run() -> Result<()> {
             Some("llms")
         }
         Commands::TextToImage { categories } => {
-            commands::media::run_text_to_image(&client, cli.refresh, format, *categories).await?;
+            commands::media::run_text_to_image(client, cli.refresh, format, *categories).await?;
             Some("text_to_image")
         }
         Commands::ImageEditing => {
-            commands::media::run_image_editing(&client, cli.refresh, format).await?;
+            commands::media::run_image_editing(client, cli.refresh, format).await?;
             Some("image_editing")
         }
         Commands::TextToSpeech => {
-            commands::media::run_text_to_speech(&client, cli.refresh, format).await?;
+            commands::media::run_text_to_speech(client, cli.refresh, format).await?;
             Some("text_to_speech")
         }
         Commands::TextToVideo { categories } => {
-            commands::media::run_text_to_video(&client, cli.refresh, format, *categories).await?;
+            commands::media::run_text_to_video(client, cli.refresh, format, *categories).await?;
             Some("text_to_video")
         }
         Commands::ImageToVideo { categories } => {
-            commands::media::run_image_to_video(&client, cli.refresh, format, *categories).await?;
+            commands::media::run_image_to_video(client, cli.refresh, format, *categories).await?;
             Some("image_to_video")
         }
-        // Profile, Cache, Query, and Skill are handled above
-        Commands::Profile { .. }
-        | Commands::Cache { .. }
-        | Commands::Query { .. }
-        | Commands::Skill { .. } => {
-            unreachable!()
-        }
+        _ => unreachable!(),
     };
 
-    // Print attribution (required by API terms) unless --quiet
-    if !cli.quiet {
-        println!();
-        println!("Data provided by Artificial Analysis (https://artificialanalysis.ai)");
-        println!("Capability data from models.dev (https://models.dev)");
-
-        // Show hint about which-llm query for advanced filtering
-        if let Some(table) = show_hint {
-            println!();
-            println!(
-                "Tip: Use 'which-llm query \"SELECT * FROM {} WHERE ...\"' for advanced filtering",
-                table
-            );
-        }
-    }
-
-    Ok(())
+    Ok(show_hint)
 }

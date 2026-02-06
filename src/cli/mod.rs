@@ -34,6 +34,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub refresh: bool,
 
+    /// Use direct API access instead of hosted data (requires API key)
+    #[arg(long, global = true)]
+    pub use_api: bool,
+
     /// Suppress attribution notice (for scripting)
     #[arg(long, short = 'q', global = true)]
     pub quiet: bool,
@@ -134,6 +138,9 @@ pub enum Commands {
         #[arg(long)]
         tables: bool,
     },
+
+    /// Show data source information and attribution
+    Info,
 
     /// Manage response cache
     Cache {

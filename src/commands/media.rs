@@ -186,3 +186,13 @@ pub async fn run_image_to_video(
     print_media_output(&models, format, categories);
     Ok(())
 }
+
+/// Display media models (used by hosted client).
+pub fn display_media_models(
+    models: &[MediaModel],
+    format: OutputFormat,
+    _table_name: &str,
+    categories: bool,
+) {
+    print_media_output(models, format, categories);
+}
