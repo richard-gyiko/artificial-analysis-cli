@@ -6,6 +6,7 @@
 use crate::error::{AppError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -151,7 +152,7 @@ impl RemoteDataClient {
         Ok(bytes.to_vec())
     }
 
-    /// Fetch and cache a parquet file if needed.
+    /// Fetch and cache a parquet file if needed, with SHA256 verification.
     pub async fn ensure_parquet(&self, name: &str, force_refresh: bool) -> Result<PathBuf> {
         let filename = format!("{}.parquet", name);
         let local_path = self.cache_dir.join(&filename);
@@ -161,8 +162,25 @@ impl RemoteDataClient {
             return Ok(local_path);
         }
 
+        // Fetch manifest to get expected checksum
+        let manifest = self.fetch_manifest().await?;
+        let expected_hash = manifest.files.get(&filename).map(|f| f.sha256.clone());
+
         // Fetch the file
         let data = self.fetch_parquet(&filename).await?;
+
+        // Verify SHA256 checksum if available
+        if let Some(expected) = expected_hash {
+            let mut hasher = Sha256::new();
+            hasher.update(&data);
+            let actual = format!("{:x}", hasher.finalize());
+            if actual != expected {
+                return Err(AppError::Cache(format!(
+                    "SHA256 mismatch for {}: expected {}, got {}",
+                    filename, expected, actual
+                )));
+            }
+        }
 
         // Write to cache
         std::fs::create_dir_all(&self.cache_dir)?;
@@ -245,23 +263,4 @@ impl RemoteDataClient {
 #[derive(Debug, Serialize, Deserialize)]
 struct RemoteMeta {
     fetched_at: String,
-}
-
-/// Check if hosted data is available (release exists).
-pub async fn check_hosted_data_available() -> bool {
-    let url = format!(
-        "https://github.com/{}/releases/tag/{}",
-        GITHUB_REPO, DATA_RELEASE_TAG
-    );
-
-    if let Ok(client) = reqwest::Client::builder()
-        .user_agent(format!("which-llm/{}", env!("CARGO_PKG_VERSION")))
-        .build()
-    {
-        if let Ok(response) = client.head(&url).send().await {
-            return response.status().is_success()
-                || response.status() == reqwest::StatusCode::FOUND;
-        }
-    }
-    false
 }

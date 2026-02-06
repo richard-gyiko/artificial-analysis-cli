@@ -22,15 +22,6 @@ use std::path::{Path, PathBuf};
 /// TTL for models.dev cache (24 hours).
 const MODELS_DEV_TTL_HOURS: i64 = 24;
 
-/// Data source mode for the unified client.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DataSource {
-    /// Use hosted data from GitHub Releases (default, no API key needed).
-    Hosted,
-    /// Use direct API access (requires API key).
-    Api,
-}
-
 /// Client for fetching data using hosted GitHub Releases.
 /// This is the default mode that requires no API key.
 pub struct HostedDataClient {

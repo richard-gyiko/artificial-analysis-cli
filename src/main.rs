@@ -169,29 +169,29 @@ async fn run_with_hosted_client(
             .await?;
             Some("llms")
         }
-        Commands::TextToImage { categories: _ } => {
+        Commands::TextToImage { categories } => {
             let models = client.get_text_to_image(cli.refresh).await?;
-            commands::media::display_media_models(&models, format, "text_to_image");
+            commands::media::display_media_models(&models, format, "text_to_image", *categories);
             Some("text_to_image")
         }
         Commands::ImageEditing => {
             let models = client.get_image_editing(cli.refresh).await?;
-            commands::media::display_media_models(&models, format, "image_editing");
+            commands::media::display_media_models(&models, format, "image_editing", false);
             Some("image_editing")
         }
         Commands::TextToSpeech => {
             let models = client.get_text_to_speech(cli.refresh).await?;
-            commands::media::display_media_models(&models, format, "text_to_speech");
+            commands::media::display_media_models(&models, format, "text_to_speech", false);
             Some("text_to_speech")
         }
-        Commands::TextToVideo { categories: _ } => {
+        Commands::TextToVideo { categories } => {
             let models = client.get_text_to_video(cli.refresh).await?;
-            commands::media::display_media_models(&models, format, "text_to_video");
+            commands::media::display_media_models(&models, format, "text_to_video", *categories);
             Some("text_to_video")
         }
-        Commands::ImageToVideo { categories: _ } => {
+        Commands::ImageToVideo { categories } => {
             let models = client.get_image_to_video(cli.refresh).await?;
-            commands::media::display_media_models(&models, format, "image_to_video");
+            commands::media::display_media_models(&models, format, "image_to_video", *categories);
             Some("image_to_video")
         }
         _ => unreachable!(),

@@ -34,25 +34,39 @@ jobs:
           ARTIFICIAL_ANALYSIS_API_KEY: ${{ secrets.ARTIFICIAL_ANALYSIS_API_KEY }}
           WHICH_LLM_CACHE_DIR: ${{ runner.temp }}/which-llm-data
         run: |
-          mkdir -p $WHICH_LLM_CACHE_DIR
+          set -euo pipefail
+          mkdir -p "$WHICH_LLM_CACHE_DIR"
           
-          # Fetch all data types to populate the cache with parquet files
-          ./target/release/which-llm llms --quiet || true
-          ./target/release/which-llm text-to-image --quiet || true
-          ./target/release/which-llm image-editing --quiet || true
-          ./target/release/which-llm text-to-speech --quiet || true
-          ./target/release/which-llm text-to-video --quiet || true
-          ./target/release/which-llm image-to-video --quiet || true
+          # Fetch critical data type (llms) - fail workflow if this fails
+          ./target/release/which-llm llms --use-api --quiet
           
-          # List generated files
+          # Fetch non-critical data types - warn but continue on error
+          ./target/release/which-llm text-to-image --use-api --quiet || echo "Warning: failed to fetch text-to-image data"
+          ./target/release/which-llm image-editing --use-api --quiet || echo "Warning: failed to fetch image-editing data"
+          ./target/release/which-llm text-to-speech --use-api --quiet || echo "Warning: failed to fetch text-to-speech data"
+          ./target/release/which-llm text-to-video --use-api --quiet || echo "Warning: failed to fetch text-to-video data"
+          ./target/release/which-llm image-to-video --use-api --quiet || echo "Warning: failed to fetch image-to-video data"
+          
+          # Verify at least llms.parquet exists
           echo "Generated parquet files:"
-          ls -la $WHICH_LLM_CACHE_DIR/*.parquet || echo "No parquet files found"
+          ls -la "$WHICH_LLM_CACHE_DIR"/*.parquet
+          if [ ! -f "$WHICH_LLM_CACHE_DIR/llms.parquet" ]; then
+            echo "Error: llms.parquet not found"
+            exit 1
+          fi
       
       - name: Generate manifest
         env:
           WHICH_LLM_CACHE_DIR: ${{ runner.temp }}/which-llm-data
         run: |
-          cd $WHICH_LLM_CACHE_DIR
+          set -euo pipefail
+          cd "$WHICH_LLM_CACHE_DIR"
+          
+          # Verify parquet files exist before generating manifest
+          if ! ls *.parquet >/dev/null 2>&1; then
+            echo "Error: No parquet files found"
+            exit 1
+          fi
           
           # Create manifest with timestamps and file info
           cat > manifest.json << EOF
