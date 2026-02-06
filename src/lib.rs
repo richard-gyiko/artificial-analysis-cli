@@ -14,6 +14,7 @@ pub mod query;
 pub mod remote;
 pub mod schema;
 pub mod sources;
+pub mod utils;
 
 pub use cli::{Cli, Commands};
 pub use config::Config;

@@ -102,6 +102,40 @@ pub enum Commands {
         modality: Option<String>,
     },
 
+    /// Compare multiple models side by side
+    Compare {
+        /// Model names to compare (fuzzy matched)
+        #[arg(required = true)]
+        models: Vec<String>,
+
+        /// Show all available fields
+        #[arg(long, short = 'v')]
+        verbose: bool,
+    },
+
+    /// Calculate token costs for models
+    Cost {
+        /// Model names to calculate costs for (fuzzy matched)
+        #[arg(required = true)]
+        models: Vec<String>,
+
+        /// Input tokens per request (supports units: 10k, 1M)
+        #[arg(long, short = 'i')]
+        input: String,
+
+        /// Output tokens per request (supports units: 10k, 1M)
+        #[arg(long, short = 'o')]
+        output: String,
+
+        /// Number of requests
+        #[arg(long, short = 'r', default_value = "1")]
+        requests: u64,
+
+        /// Time period for cost projection (once, daily, monthly)
+        #[arg(long, default_value = "once")]
+        period: String,
+    },
+
     /// List text-to-image model rankings
     TextToImage {
         /// Include category breakdown

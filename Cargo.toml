@@ -68,3 +68,17 @@ predicates = "3"
 lto = true
 codegen-units = 1
 strip = true
+
+# Optimize dev builds - faster compilation
+[profile.dev]
+opt-level = 0
+debug = true
+
+# Build dependencies with optimizations even in dev mode
+# This makes DuckDB and other heavy deps faster to run (slightly slower to compile first time, but cached)
+[profile.dev.package."*"]
+opt-level = 2
+
+# Use more codegen units for faster parallel compilation in dev
+[profile.dev.build-override]
+opt-level = 0

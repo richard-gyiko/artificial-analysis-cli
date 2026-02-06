@@ -34,6 +34,9 @@ pub enum AppError {
     #[error("Cache error: {0}")]
     Cache(String),
 
+    #[error("Not found: {0}")]
+    NotFound(String),
+
     #[error("{0}")]
     Query(String),
 
