@@ -48,6 +48,13 @@ pub fn parse_tokens(s: &str) -> Result<u64> {
         ))
     })?;
 
+    if !value.is_finite() {
+        return Err(AppError::Config(format!(
+            "Invalid token count '{}': must be a finite number",
+            s
+        )));
+    }
+
     if value < 0.0 {
         return Err(AppError::Config(format!(
             "Invalid token count '{}': must be positive",
@@ -55,7 +62,16 @@ pub fn parse_tokens(s: &str) -> Result<u64> {
         )));
     }
 
-    let result = (value * multiplier).round() as u64;
+    let product = value * multiplier;
+
+    if !product.is_finite() || product > u64::MAX as f64 {
+        return Err(AppError::Config(format!(
+            "Invalid token count '{}': value is out of range",
+            s
+        )));
+    }
+
+    let result = product.round() as u64;
 
     Ok(result)
 }

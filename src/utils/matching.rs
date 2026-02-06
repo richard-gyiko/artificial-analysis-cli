@@ -1,14 +1,14 @@
 //! Model matching utilities.
 //!
-//! Fuzzy matching for finding models by name or slug.
+//! Substring matching for finding models by name or slug.
 
 use crate::models::LlmModel;
 
-/// Filter models by a search term using fuzzy matching.
+/// Filter models by a search term using substring matching.
 ///
 /// Matches against:
-/// - Model slug (contains match)
-/// - Model name (case-insensitive contains match)
+/// - Model slug (case-sensitive substring match)
+/// - Model name (case-insensitive substring match)
 ///
 /// Returns all models that match the search term.
 pub fn filter_models_by_name<'a>(models: &'a [LlmModel], search: &str) -> Vec<&'a LlmModel> {
@@ -19,11 +19,11 @@ pub fn filter_models_by_name<'a>(models: &'a [LlmModel], search: &str) -> Vec<&'
         .collect()
 }
 
-/// Filter models by creator using fuzzy matching.
+/// Filter models by creator using substring matching.
 ///
 /// Matches against:
-/// - Creator slug (contains match)
-/// - Creator name (case-insensitive contains match)
+/// - Creator slug (case-sensitive substring match)
+/// - Creator name (case-insensitive substring match)
 pub fn filter_models_by_creator<'a>(models: &'a [LlmModel], creator: &str) -> Vec<&'a LlmModel> {
     let creator_lower = creator.to_lowercase();
     models

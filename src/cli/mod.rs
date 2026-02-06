@@ -127,11 +127,11 @@ pub enum Commands {
         #[arg(long, short = 'o')]
         output: String,
 
-        /// Number of requests
+        /// Number of requests per period (used with --period for projections)
         #[arg(long, short = 'r', default_value = "1")]
         requests: u64,
 
-        /// Time period for cost projection (once, daily, monthly)
+        /// Time period for cost projection: once (single calculation), daily, or monthly (30 days)
         #[arg(long, default_value = "once")]
         period: String,
     },

@@ -346,58 +346,120 @@ pub fn run(
     };
 
     // Output based on format
-    if format == OutputFormat::Json {
-        println!("{}", serde_json::to_string_pretty(&result).unwrap());
-        return Ok(());
-    }
+    match format {
+        OutputFormat::Json => {
+            let json =
+                serde_json::to_string_pretty(&result).map_err(crate::error::AppError::from)?;
+            println!("{}", json);
+        }
+        OutputFormat::Csv => {
+            // CSV: header row is "Field", then model names; each row is a field and its values
+            fn escape_csv_cell(value: &str) -> String {
+                let needs_quotes =
+                    value.contains(',') || value.contains('"') || value.contains('\n');
+                if !needs_quotes {
+                    return value.to_string();
+                }
+                let mut escaped = String::with_capacity(value.len() + 2);
+                escaped.push('"');
+                for ch in value.chars() {
+                    if ch == '"' {
+                        escaped.push('"');
+                    }
+                    escaped.push(ch);
+                }
+                escaped.push('"');
+                escaped
+            }
 
-    // Build transposed table (fields as rows, models as columns)
-    // Calculate column widths
-    let field_name_width = result
-        .fields
-        .iter()
-        .map(|f| f.name.len())
-        .max()
-        .unwrap_or(15);
-    let model_widths: Vec<usize> = model_names
-        .iter()
-        .enumerate()
-        .map(|(i, name)| {
-            result
+            // Header
+            let mut header_cells = Vec::with_capacity(model_names.len() + 1);
+            header_cells.push(escape_csv_cell("Field"));
+            for name in &model_names {
+                header_cells.push(escape_csv_cell(name));
+            }
+            println!("{}", header_cells.join(","));
+
+            // Rows
+            for field in &result.fields {
+                let mut row_cells = Vec::with_capacity(model_names.len() + 1);
+                row_cells.push(escape_csv_cell(&field.name));
+                for value in &field.values {
+                    row_cells.push(escape_csv_cell(value));
+                }
+                println!("{}", row_cells.join(","));
+            }
+        }
+        OutputFormat::Plain => {
+            // Plain: tab-separated values
+            // Header
+            print!("Field");
+            for name in &model_names {
+                print!("\t{}", name);
+            }
+            println!();
+
+            // Rows
+            for field in &result.fields {
+                print!("{}", field.name);
+                for value in &field.values {
+                    print!("\t{}", value);
+                }
+                println!();
+            }
+            println!();
+            println!("* = best in category");
+        }
+        OutputFormat::Markdown | OutputFormat::Table => {
+            // Markdown table format (default)
+            // Calculate column widths
+            let field_name_width = result
                 .fields
                 .iter()
-                .map(|f| f.values.get(i).map(|v| v.len()).unwrap_or(0))
+                .map(|f| f.name.len())
                 .max()
-                .unwrap_or(0)
-                .max(name.len())
-        })
-        .collect();
+                .unwrap_or(15);
+            let model_widths: Vec<usize> = model_names
+                .iter()
+                .enumerate()
+                .map(|(i, name)| {
+                    result
+                        .fields
+                        .iter()
+                        .map(|f| f.values.get(i).map(|v| v.len()).unwrap_or(0))
+                        .max()
+                        .unwrap_or(0)
+                        .max(name.len())
+                })
+                .collect();
 
-    // Print header
-    print!("| {:<width$} |", "Field", width = field_name_width);
-    for (i, name) in model_names.iter().enumerate() {
-        print!(" {:<width$} |", name, width = model_widths[i]);
-    }
-    println!();
+            // Print header
+            print!("| {:<width$} |", "Field", width = field_name_width);
+            for (i, name) in model_names.iter().enumerate() {
+                print!(" {:<width$} |", name, width = model_widths[i]);
+            }
+            println!();
 
-    // Print separator
-    print!("|{:-<width$}|", "", width = field_name_width + 2);
-    for width in &model_widths {
-        print!("{:-<width$}|", "", width = width + 2);
-    }
-    println!();
+            // Print separator
+            print!("|{:-<width$}|", "", width = field_name_width + 2);
+            for width in &model_widths {
+                print!("{:-<width$}|", "", width = width + 2);
+            }
+            println!();
 
-    // Print data rows
-    for field in &result.fields {
-        print!("| {:<width$} |", field.name, width = field_name_width);
-        for (i, value) in field.values.iter().enumerate() {
-            print!(" {:<width$} |", value, width = model_widths[i]);
+            // Print data rows
+            for field in &result.fields {
+                print!("| {:<width$} |", field.name, width = field_name_width);
+                for (i, value) in field.values.iter().enumerate() {
+                    print!(" {:<width$} |", value, width = model_widths[i]);
+                }
+                println!();
+            }
+
+            println!();
+            println!("* = best in category");
         }
-        println!();
     }
-
-    println!();
-    println!("* = best in category");
 
     Ok(())
 }

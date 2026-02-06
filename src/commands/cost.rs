@@ -99,7 +99,11 @@ fn format_token_count(tokens: u64) -> String {
     if tokens >= 1_000_000 {
         format!("{:.1}M", tokens as f64 / 1_000_000.0)
     } else if tokens >= 1_000 {
-        format!("{}K", tokens / 1_000)
+        if tokens % 1_000 == 0 {
+            format!("{}K", tokens / 1_000)
+        } else {
+            format!("{:.1}K", tokens as f64 / 1_000.0)
+        }
     } else {
         tokens.to_string()
     }
@@ -207,105 +211,114 @@ pub fn run(
         return Ok(());
     }
 
-    // For single model, show detailed output
-    if results.len() == 1 {
-        let result = &results[0];
-        println!("Model: {}", result.name);
-        println!();
-        println!("Cost per request:");
-        println!(
-            "  Input ({} tokens):    {}",
-            format_token_count(result.input_tokens),
-            format_cost(result.input_cost)
-        );
-        println!(
-            "  Output ({} tokens):   {}",
-            format_token_count(result.output_tokens),
-            format_cost(result.output_cost)
-        );
-        println!(
-            "  Total:                  {}",
-            format_cost(result.total_cost)
-        );
-
-        if requests > 1 || period != Period::Once {
-            println!();
-            if requests > 1 {
-                println!(
-                    "Cost for {} requests:    {}",
-                    requests,
-                    format_cost(result.period_cost)
-                );
+    // Create rows for all output formats (even single model uses table for CSV/Plain)
+    let rows: Vec<CostRow> = results
+        .iter()
+        .map(|r| {
+            let is_winner = results.len() > 1 && min_cost.is_some() && r.total_cost == min_cost;
+            CostRow {
+                name: r.name.clone(),
+                input_cost: format_cost(r.input_cost),
+                output_cost: format_cost(r.output_cost),
+                total_cost: format_cost_with_winner(r.total_cost, is_winner),
             }
-            if period == Period::Daily {
-                println!(
-                    "Daily ({} requests):     {}",
-                    requests,
-                    format_cost(result.period_cost)
-                );
-                println!(
-                    "Monthly (30 days):       {}",
-                    format_cost(result.monthly_cost)
-                );
-            } else if period == Period::Monthly {
-                println!(
-                    "Monthly:                 {}",
-                    format_cost(result.monthly_cost)
-                );
-            }
+        })
+        .collect();
+
+    match format {
+        OutputFormat::Json => unreachable!(), // Handled above
+        OutputFormat::Csv | OutputFormat::Plain => {
+            // For CSV and Plain, just output the table data without any preamble
+            println!("{}", format_output(&rows, format));
         }
-    } else {
-        // Multiple models: show comparison table
-        println!(
-            "Cost Comparison ({} input / {} output tokens per request)",
-            format_token_count(input_tokens),
-            format_token_count(output_tokens)
-        );
-
-        if requests > 1 {
-            println!("Requests: {}", requests);
-        }
-
-        println!();
-
-        // Create rows with winner highlighting
-        let rows: Vec<CostRow> = results
-            .iter()
-            .map(|r| {
-                let is_winner = min_cost.is_some() && r.total_cost == min_cost;
-                CostRow {
-                    name: r.name.clone(),
-                    input_cost: format_cost(r.input_cost),
-                    output_cost: format_cost(r.output_cost),
-                    total_cost: format_cost_with_winner(r.total_cost, is_winner),
-                }
-            })
-            .collect();
-
-        println!("{}", format_output(&rows, format));
-
-        if min_cost.is_some() {
-            println!();
-            println!("* = lowest cost");
-        }
-
-        // Show projections if requested
-        if period != Period::Once {
-            println!();
-            if period == Period::Daily {
-                println!("Daily costs ({} requests):", requests);
-                for r in &results {
-                    println!("  {}: {}", r.name, format_cost(r.period_cost));
-                }
+        OutputFormat::Markdown | OutputFormat::Table => {
+            // For Markdown/Table, show full human-readable output
+            if results.len() == 1 {
+                // Single model: detailed output
+                let result = &results[0];
+                println!("Model: {}", result.name);
                 println!();
-                println!("Monthly estimates (30 days):");
-                for r in &results {
-                    println!("  {}: {}", r.name, format_cost(r.monthly_cost));
+                println!("Cost per request:");
+                println!(
+                    "  Input ({} tokens):    {}",
+                    format_token_count(result.input_tokens),
+                    format_cost(result.input_cost)
+                );
+                println!(
+                    "  Output ({} tokens):   {}",
+                    format_token_count(result.output_tokens),
+                    format_cost(result.output_cost)
+                );
+                println!(
+                    "  Total:                  {}",
+                    format_cost(result.total_cost)
+                );
+
+                if requests > 1 || period != Period::Once {
+                    println!();
+                    if requests > 1 {
+                        println!(
+                            "Cost for {} requests:    {}",
+                            requests,
+                            format_cost(result.period_cost)
+                        );
+                    }
+                    if period == Period::Daily {
+                        println!(
+                            "Daily ({} requests):     {}",
+                            requests,
+                            format_cost(result.period_cost)
+                        );
+                        println!(
+                            "Monthly (30 days):       {}",
+                            format_cost(result.monthly_cost)
+                        );
+                    } else if period == Period::Monthly {
+                        println!(
+                            "Monthly:                 {}",
+                            format_cost(result.monthly_cost)
+                        );
+                    }
                 }
             } else {
-                println!("Monthly costs ({} requests/day):", requests);
-                for r in &results {
-                    println!("  {}: {}", r.name, format_cost(r.monthly_cost));
+                // Multiple models: comparison table with preamble
+                println!(
+                    "Cost Comparison ({} input / {} output tokens per request)",
+                    format_token_count(input_tokens),
+                    format_token_count(output_tokens)
+                );
+
+                if requests > 1 {
+                    println!("Requests: {}", requests);
+                }
+
+                println!();
+                println!("{}", format_output(&rows, format));
+
+                if min_cost.is_some() {
+                    println!();
+                    println!("* = lowest cost");
+                }
+
+                // Show projections if requested
+                if period != Period::Once {
+                    println!();
+                    if period == Period::Daily {
+                        println!("Daily costs ({} requests):", requests);
+                        for r in &results {
+                            println!("  {}: {}", r.name, format_cost(r.period_cost));
+                        }
+                        println!();
+                        println!("Monthly estimates (30 days):");
+                        for r in &results {
+                            println!("  {}: {}", r.name, format_cost(r.monthly_cost));
+                        }
+                    } else {
+                        println!("Monthly costs ({} requests/day):", requests);
+                        for r in &results {
+                            println!("  {}: {}", r.name, format_cost(r.monthly_cost));
+                        }
+                    }
                 }
             }
         }

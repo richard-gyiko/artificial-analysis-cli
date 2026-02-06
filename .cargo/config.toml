@@ -8,7 +8,7 @@
 rustflags = ["-C", "link-arg=/DEBUG:NONE"]
 
 [build]
-# Use all available CPU cores for building
+# Limit parallel build jobs (adjust based on your machine)
 jobs = 8
 
 [net]

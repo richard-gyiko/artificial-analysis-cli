@@ -79,6 +79,6 @@ debug = true
 [profile.dev.package."*"]
 opt-level = 2
 
-# Use more codegen units for faster parallel compilation in dev
+# Optimize dependencies in dev mode for faster runtime (DuckDB, etc.)
 [profile.dev.build-override]
 opt-level = 0
