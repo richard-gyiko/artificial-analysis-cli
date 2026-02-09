@@ -88,6 +88,11 @@ jobs:
             fi
           done
 
+      - name: Create skill archive
+        run: |
+          cd skills
+          zip -r ../release/which-llm-skill.zip which-llm/
+
       - name: Generate SHA256SUMS
         run: |
           cd release

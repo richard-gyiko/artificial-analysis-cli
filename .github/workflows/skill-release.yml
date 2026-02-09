@@ -21,11 +21,11 @@ jobs:
 
       - name: Create skill archive
         run: |
-          cd skills && zip -r ../which-llm-skill-${{ steps.version.outputs.version }}.zip which-llm
+          cd skills && zip -r ../which-llm-skill.zip which-llm
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "Skill v${{ steps.version.outputs.version }}"
           generate_release_notes: true
-          files: which-llm-skill-*.zip
+          files: which-llm-skill.zip
