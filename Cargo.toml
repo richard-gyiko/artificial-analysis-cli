@@ -82,3 +82,11 @@ opt-level = 2
 # Optimize dependencies in dev mode for faster runtime (DuckDB, etc.)
 [profile.dev.build-override]
 opt-level = 0
+
+# Optimized profile for CI builds
+# Faster compilation than dev, slightly optimized for test runtime
+[profile.ci]
+inherits = "dev"
+opt-level = 1        # Slight optimization for faster test execution
+debug = 0            # Skip debug info generation
+incremental = false  # Cleaner builds, smaller cache

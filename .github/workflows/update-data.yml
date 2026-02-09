@@ -20,14 +20,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Download CLI from latest release
+        id: download
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          
+          # Try to download the latest CLI release
+          if gh release download --repo ${{ github.repository }} \
+              --pattern 'which-llm-x86_64-unknown-linux-gnu.tar.gz' \
+              --dir /tmp; then
+            echo "Downloaded CLI from release"
+            tar -xzf /tmp/which-llm-*.tar.gz -C /tmp
+            chmod +x /tmp/which-llm
+            echo "cli_path=/tmp/which-llm" >> $GITHUB_OUTPUT
+            echo "need_build=false" >> $GITHUB_OUTPUT
+          else
+            echo "No release found, will build from source"
+            echo "need_build=true" >> $GITHUB_OUTPUT
+          fi
       
-      - uses: Swatinem/rust-cache@v2
+      # Fallback: Build from source if no release exists
+      - name: Setup Rust (fallback)
+        if: steps.download.outputs.need_build == 'true'
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache Cargo (fallback)
+        if: steps.download.outputs.need_build == 'true'
+        uses: Swatinem/rust-cache@v2
         with:
           shared-key: "ubuntu-latest"
       
-      - name: Build CLI
-        run: cargo build --release
+      - name: Build CLI (fallback)
+        if: steps.download.outputs.need_build == 'true'
+        run: |
+          cargo build --release
+          echo "cli_path=./target/release/which-llm" >> $GITHUB_OUTPUT
       
       - name: Fetch data from APIs
         env:
@@ -37,15 +66,22 @@ jobs:
           set -euo pipefail
           mkdir -p "$WHICH_LLM_CACHE_DIR"
           
+          # Determine CLI path
+          if [ "${{ steps.download.outputs.need_build }}" == "true" ]; then
+            CLI="./target/release/which-llm"
+          else
+            CLI="/tmp/which-llm"
+          fi
+          
           # Fetch critical data type (llms) - fail workflow if this fails
-          ./target/release/which-llm llms --use-api --quiet
+          $CLI llms --use-api --quiet
           
           # Fetch non-critical data types - warn but continue on error
-          ./target/release/which-llm text-to-image --use-api --quiet || echo "Warning: failed to fetch text-to-image data"
-          ./target/release/which-llm image-editing --use-api --quiet || echo "Warning: failed to fetch image-editing data"
-          ./target/release/which-llm text-to-speech --use-api --quiet || echo "Warning: failed to fetch text-to-speech data"
-          ./target/release/which-llm text-to-video --use-api --quiet || echo "Warning: failed to fetch text-to-video data"
-          ./target/release/which-llm image-to-video --use-api --quiet || echo "Warning: failed to fetch image-to-video data"
+          $CLI text-to-image --use-api --quiet || echo "Warning: failed to fetch text-to-image data"
+          $CLI image-editing --use-api --quiet || echo "Warning: failed to fetch image-editing data"
+          $CLI text-to-speech --use-api --quiet || echo "Warning: failed to fetch text-to-speech data"
+          $CLI text-to-video --use-api --quiet || echo "Warning: failed to fetch text-to-video data"
+          $CLI image-to-video --use-api --quiet || echo "Warning: failed to fetch image-to-video data"
           
           # Verify at least llms.parquet exists
           echo "Generated parquet files:"

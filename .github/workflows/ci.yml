@@ -13,13 +13,12 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Speed up builds
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
-  # Fast checks that don't need full compilation
+  # Format check - no compilation, runs in parallel with ci
   fmt:
     name: Format
     runs-on: ubuntu-latest
@@ -30,7 +29,7 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all -- --check
 
-  # Main CI job - combines check, clippy, and test to share build cache
+  # Main CI: clippy + test in single job to share compilation
   ci:
     name: CI
     runs-on: ubuntu-latest
@@ -39,20 +38,23 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "ci-ubuntu"
-          # Cache the target directory
-          cache-targets: true
+          # Only save cache from main to prevent PR cache pollution
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Clippy
-        run: cargo clippy --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
-        run: cargo test --all-features
+        run: cargo nextest run --all-features --cargo-profile ci
+      - name: Doctest
+        run: cargo test --doc --all-features --profile ci
 
   # Cross-platform tests only on main branch pushes
   test-platforms:
     name: Test (${{ matrix.os }})
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: ci
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -61,24 +63,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ matrix.os }}
-      - run: cargo test --all-features
-
-  # Release build verification only on main
-  build-release:
-    name: Build Release (${{ matrix.os }})
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "release-${{ matrix.os }}"
-      - run: cargo build --release
+      - run: cargo nextest run --all-features --cargo-profile ci
+      - run: cargo test --doc --all-features --profile ci
