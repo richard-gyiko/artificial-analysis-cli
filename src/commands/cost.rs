@@ -18,7 +18,7 @@ pub enum Period {
 }
 
 impl Period {
-    pub fn from_str(s: &str) -> Result<Self> {
+    pub fn parse(s: &str) -> Result<Self> {
         match s.to_lowercase().as_str() {
             "once" => Ok(Period::Once),
             "daily" | "day" => Ok(Period::Daily),
@@ -184,7 +184,7 @@ pub fn run(
     // Parse token counts
     let input_tokens = parse_tokens(input_tokens_str)?;
     let output_tokens = parse_tokens(output_tokens_str)?;
-    let period = Period::from_str(period_str)?;
+    let period = Period::parse(period_str)?;
 
     // Find matching models
     let matched_models = find_models_by_names(models, model_searches);

@@ -36,11 +36,14 @@ enum FieldType {
     NoWinner,
 }
 
+/// Type alias for field extractor functions.
+type FieldExtractor = Box<dyn Fn(&LlmModel) -> Option<FieldValue>>;
+
 /// Field definition for comparison.
 struct FieldDef {
     name: &'static str,
     field_type: FieldType,
-    extractor: Box<dyn Fn(&LlmModel) -> Option<FieldValue>>,
+    extractor: FieldExtractor,
 }
 
 /// Field value union type.
