@@ -230,6 +230,41 @@ which-llm query --tables
 
 </details>
 
+### Compare Models
+
+Compare models side-by-side with highlighted winners:
+
+```bash
+# Compare two or more models
+which-llm compare "gpt-5 (high)" "claude 4.5 sonnet" "gemini 2.5 pro"
+
+# Show additional fields
+which-llm compare "gpt-5" "claude-4.5" --verbose
+
+# Output formats: --json, --csv, --table, --plain
+which-llm compare "gpt-5" "claude-4.5" --json
+```
+
+The compare command uses fuzzy matching on model names and displays a transposed table with models as columns and metrics as rows. Winners for each metric are marked with `*`.
+
+### Calculate Token Costs
+
+Estimate token costs with projections:
+
+```bash
+# Single model cost calculation
+which-llm cost "gpt-5 (high)" --input 10k --output 5k
+
+# Compare costs across models
+which-llm cost "gpt-5" "claude 4.5" --input 1M --output 500k
+
+# Daily/monthly projections with request volume
+which-llm cost "gpt-5 (high)" --input 2k --output 1k --requests 1000 --period daily
+
+# Supports token units: k (thousands), M (millions), B (billions)
+which-llm cost "claude-4.5" --input 1.5M --output 750k
+```
+
 ### Other Commands
 
 ```bash

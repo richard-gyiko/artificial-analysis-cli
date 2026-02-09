@@ -38,7 +38,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ matrix.os }}
+          # Use target-specific key for cross-compilation (mac builds both x64 and arm)
+          shared-key: "release-${{ matrix.target }}"
+          # Always save cache for release builds (only triggered on tags)
+          save-if: true
 
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
