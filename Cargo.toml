@@ -1,6 +1,6 @@
 [package]
 name = "which-llm"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 description = "CLI for querying AI model benchmarks from Artificial Analysis"
 license = "MIT"

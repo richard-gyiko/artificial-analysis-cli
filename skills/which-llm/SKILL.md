@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires `which-llm` CLI installed and configured with API key
 metadata:
   author: richard-gyiko
-  version: "0.5.0"
+  version: "0.6.0"
   category: "ai"
 allowed-tools: Bash(which-llm:*) Read
 ---
