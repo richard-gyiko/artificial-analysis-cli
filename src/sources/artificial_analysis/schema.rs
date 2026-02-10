@@ -5,7 +5,7 @@ use crate::schema::{Column, TableDef};
 /// Benchmarks table schema (from Artificial Analysis).
 pub const BENCHMARKS: TableDef = TableDef {
     name: "benchmarks",
-    command: "which-llm llms",
+    command: "which-llm refresh",
     parquet_file: "benchmarks.parquet",
     columns: &[
         Column {

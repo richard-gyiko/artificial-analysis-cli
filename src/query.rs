@@ -695,7 +695,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("not found"));
-        assert!(err.contains("which-llm llms"));
+        assert!(err.contains("which-llm refresh"));
     }
 
     #[test]
