@@ -82,6 +82,10 @@ pub struct ModelsDevCost {
     pub input: Option<f64>,
     #[serde(default)]
     pub output: Option<f64>,
+    #[serde(default)]
+    pub cache_read: Option<f64>,
+    #[serde(default)]
+    pub cache_write: Option<f64>,
 }
 
 /// Modality information from models.dev.
@@ -97,8 +101,15 @@ pub struct ModelsDevModalities {
 /// Contains provider info combined with model info.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelsDevRow {
+    // Provider identity
     pub provider_id: String,
     pub provider_name: String,
+    // Provider metadata
+    pub provider_env: Option<String>,
+    pub provider_npm: Option<String>,
+    pub provider_api: Option<String>,
+    pub provider_doc: Option<String>,
+    // Model identity
     pub model_id: String,
     pub model_name: String,
     pub family: Option<String>,
@@ -121,6 +132,8 @@ pub struct ModelsDevRow {
     // Cost
     pub cost_input: Option<f64>,
     pub cost_output: Option<f64>,
+    pub cost_cache_read: Option<f64>,
+    pub cost_cache_write: Option<f64>,
     // Modalities (stored as comma-separated strings for Parquet)
     pub input_modalities: Option<String>,
     pub output_modalities: Option<String>,
@@ -132,24 +145,41 @@ impl ModelsDevRow {
         Self {
             provider_id: provider.id.clone(),
             provider_name: provider.name.clone(),
+            // Provider metadata
+            provider_env: if provider.env.is_empty() {
+                None
+            } else {
+                Some(provider.env.join(","))
+            },
+            provider_npm: provider.npm.clone(),
+            provider_api: provider.api.clone(),
+            provider_doc: provider.doc.clone(),
+            // Model identity
             model_id: model.id.clone(),
             model_name: model.name.clone(),
             family: model.family.clone(),
+            // Capabilities
             attachment: model.attachment,
             reasoning: model.reasoning,
             tool_call: model.tool_call,
             structured_output: model.structured_output,
             temperature: model.temperature,
+            // Metadata
             knowledge: model.knowledge.clone(),
             release_date: model.release_date.clone(),
             last_updated: model.last_updated.clone(),
             open_weights: model.open_weights,
             status: model.status.clone(),
+            // Limits
             context_window: model.limit.as_ref().and_then(|l| l.context),
             max_input_tokens: model.limit.as_ref().and_then(|l| l.input),
             max_output_tokens: model.limit.as_ref().and_then(|l| l.output),
+            // Costs (including cache pricing)
             cost_input: model.cost.as_ref().and_then(|c| c.input),
             cost_output: model.cost.as_ref().and_then(|c| c.output),
+            cost_cache_read: model.cost.as_ref().and_then(|c| c.cache_read),
+            cost_cache_write: model.cost.as_ref().and_then(|c| c.cache_write),
+            // Modalities
             input_modalities: model.modalities.as_ref().map(|m| m.input.join(",")),
             output_modalities: model.modalities.as_ref().map(|m| m.output.join(",")),
         }
@@ -245,8 +275,8 @@ mod tests {
             name: "OpenAI".into(),
             env: vec!["OPENAI_API_KEY".into()],
             npm: Some("@ai-sdk/openai".into()),
-            doc: None,
-            api: None,
+            doc: Some("https://platform.openai.com/docs".into()),
+            api: Some("https://api.openai.com/v1".into()),
             models: HashMap::new(),
         };
 
@@ -272,6 +302,8 @@ mod tests {
             cost: Some(ModelsDevCost {
                 input: Some(2.5),
                 output: Some(10.0),
+                cache_read: Some(1.25),
+                cache_write: Some(3.75),
             }),
             modalities: Some(ModelsDevModalities {
                 input: vec!["text".into(), "image".into()],
@@ -280,10 +312,112 @@ mod tests {
         };
 
         let row = ModelsDevRow::from_provider_model(&provider, &model);
+        // Provider identity
         assert_eq!(row.provider_id, "openai");
+        assert_eq!(row.provider_name, "OpenAI");
+        // Provider metadata
+        assert_eq!(row.provider_env, Some("OPENAI_API_KEY".into()));
+        assert_eq!(row.provider_npm, Some("@ai-sdk/openai".into()));
+        assert_eq!(
+            row.provider_doc,
+            Some("https://platform.openai.com/docs".into())
+        );
+        assert_eq!(row.provider_api, Some("https://api.openai.com/v1".into()));
+        // Model identity
         assert_eq!(row.model_id, "gpt-4o");
+        assert_eq!(row.model_name, "GPT-4o");
+        assert_eq!(row.family, Some("gpt-4".into()));
+        // Limits
         assert_eq!(row.context_window, Some(128000));
+        assert_eq!(row.max_output_tokens, Some(16384));
+        // Costs including cache
+        assert_eq!(row.cost_input, Some(2.5));
+        assert_eq!(row.cost_output, Some(10.0));
+        assert_eq!(row.cost_cache_read, Some(1.25));
+        assert_eq!(row.cost_cache_write, Some(3.75));
+        // Modalities
         assert_eq!(row.input_modalities, Some("text,image".into()));
         assert_eq!(row.output_modalities, Some("text".into()));
+    }
+
+    #[test]
+    fn test_flatten_row_empty_env() {
+        let provider = ModelsDevProvider {
+            id: "test".into(),
+            name: "Test".into(),
+            env: vec![],
+            npm: None,
+            doc: None,
+            api: None,
+            models: HashMap::new(),
+        };
+
+        let model = ModelsDevModel {
+            id: "model".into(),
+            name: "Model".into(),
+            family: None,
+            attachment: None,
+            reasoning: None,
+            tool_call: None,
+            structured_output: None,
+            temperature: None,
+            knowledge: None,
+            release_date: None,
+            last_updated: None,
+            open_weights: None,
+            status: None,
+            limit: None,
+            cost: None,
+            modalities: None,
+        };
+
+        let row = ModelsDevRow::from_provider_model(&provider, &model);
+        // Empty env should be None, not Some("")
+        assert_eq!(row.provider_env, None);
+        assert_eq!(row.provider_npm, None);
+        assert_eq!(row.cost_cache_read, None);
+        assert_eq!(row.cost_cache_write, None);
+    }
+
+    #[test]
+    fn test_flatten_row_multiple_env_vars() {
+        let provider = ModelsDevProvider {
+            id: "azure".into(),
+            name: "Azure".into(),
+            env: vec![
+                "AZURE_OPENAI_API_KEY".into(),
+                "AZURE_OPENAI_ENDPOINT".into(),
+            ],
+            npm: Some("@ai-sdk/azure".into()),
+            doc: None,
+            api: None,
+            models: HashMap::new(),
+        };
+
+        let model = ModelsDevModel {
+            id: "gpt-4".into(),
+            name: "GPT-4".into(),
+            family: None,
+            attachment: None,
+            reasoning: None,
+            tool_call: None,
+            structured_output: None,
+            temperature: None,
+            knowledge: None,
+            release_date: None,
+            last_updated: None,
+            open_weights: None,
+            status: None,
+            limit: None,
+            cost: None,
+            modalities: None,
+        };
+
+        let row = ModelsDevRow::from_provider_model(&provider, &model);
+        // Multiple env vars should be comma-separated
+        assert_eq!(
+            row.provider_env,
+            Some("AZURE_OPENAI_API_KEY,AZURE_OPENAI_ENDPOINT".into())
+        );
     }
 }

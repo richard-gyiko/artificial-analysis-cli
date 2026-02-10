@@ -178,11 +178,11 @@ which-llm llms --json
 Use full SQL expressiveness on the cached benchmark data:
 
 ```bash
-# Best coding models under $5/M
-which-llm query "SELECT name, creator, coding, output_price FROM llms WHERE coding > 40 AND output_price < 5 ORDER BY coding DESC"
+# Best coding models under $5/M (benchmarks table)
+which-llm query "SELECT name, creator, coding, output_price FROM benchmarks WHERE coding > 40 AND output_price < 5 ORDER BY coding DESC"
 
-# Models with tool calling and large context
-which-llm query "SELECT name, context_window, tool_call FROM llms WHERE tool_call = true AND context_window > 100000"
+# Models with tool calling and large context (models table)
+which-llm query "SELECT model_name, provider_name, context_window, tool_call FROM models WHERE tool_call = true AND context_window > 100000"
 
 # List available tables
 which-llm query --tables
@@ -193,16 +193,17 @@ which-llm query --tables
 
 #### Tables
 
-| Table | Description |
-|-------|-------------|
-| `llms` | LLM models with benchmarks and capabilities |
-| `text_to_image` | Text-to-image models |
-| `image_editing` | Image editing models |
-| `text_to_speech` | Text-to-speech models |
-| `text_to_video` | Text-to-video models |
-| `image_to_video` | Image-to-video models |
+| Table | Description | Source |
+|-------|-------------|--------|
+| `benchmarks` | LLM benchmark scores and pricing | Artificial Analysis |
+| `models` | Capability metadata and provider info | models.dev |
+| `text_to_image` | Text-to-image models | Artificial Analysis |
+| `image_editing` | Image editing models | Artificial Analysis |
+| `text_to_speech` | Text-to-speech models | Artificial Analysis |
+| `text_to_video` | Text-to-video models | Artificial Analysis |
+| `image_to_video` | Image-to-video models | Artificial Analysis |
 
-#### LLMs Table — Core Fields
+#### Benchmarks Table (Artificial Analysis)
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -216,17 +217,19 @@ which-llm query --tables
 | `tps` | DOUBLE | Tokens per second |
 | `latency` | DOUBLE | Time to first token (seconds) |
 
-#### LLMs Table — Capability Fields
+#### Models Table (models.dev)
 
 | Column | Type | Description |
 |--------|------|-------------|
+| `model_name` | VARCHAR | Model name |
+| `provider_name` | VARCHAR | Provider (OpenAI, Anthropic, etc.) |
 | `context_window` | BIGINT | Maximum context window |
 | `tool_call` | BOOLEAN | Supports function calling |
 | `structured_output` | BOOLEAN | Supports JSON mode |
 | `reasoning` | BOOLEAN | Chain-of-thought model |
 | `open_weights` | BOOLEAN | Weights publicly available |
 
-> **Note:** Capability fields are `NULL` for ~47% of models not matched to models.dev. Use `models_dev_matched = true` to filter for complete data.
+> **Note:** The `benchmarks` and `models` tables are independent. Use SQL to join or correlate data between them based on model/provider names.
 
 </details>
 

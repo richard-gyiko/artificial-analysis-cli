@@ -119,7 +119,7 @@ fn test_query_tables() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Available tables"))
-        .stdout(predicate::str::contains("llms"))
+        .stdout(predicate::str::contains("benchmarks"))
         .stdout(predicate::str::contains("text_to_image"))
         .stdout(predicate::str::contains("not cached"));
 }
@@ -139,7 +139,7 @@ fn test_query_missing_table() {
     let temp = tempfile::tempdir().unwrap();
     cmd_with_temp_config(&temp)
         .arg("query")
-        .arg("SELECT * FROM llms")
+        .arg("SELECT * FROM benchmarks")
         .assert()
         .failure()
         .stderr(predicate::str::contains("not found"))

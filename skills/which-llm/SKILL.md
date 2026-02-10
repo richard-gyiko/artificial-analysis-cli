@@ -1,11 +1,11 @@
 ---
 name: which-llm
-description: Select optimal LLM(s) for a task based on skill requirements, budget, and constraints. Uses the `which-llm` CLI to query Artificial Analysis benchmarks enriched with capability data from models.dev.
+description: Select optimal LLM(s) for a task based on skill requirements, budget, and constraints. Uses the `which-llm` CLI to query benchmark data from Artificial Analysis and capability data from models.dev.
 license: MIT
 compatibility: Requires `which-llm` CLI installed and configured with API key
 metadata:
   author: richard-gyiko
-  version: "0.6.0"
+  version: "0.8.0"
   category: "ai"
 allowed-tools: Bash(which-llm:*) Read
 ---
@@ -71,25 +71,25 @@ Does it require JUDGMENT, COMPARISON, or ANALYSIS?
 | Skill Type | Examples | Min Intelligence | Min Coding | Consider Also |
 |------------|----------|------------------|------------|---------------|
 | **Transformational** | summarize, extract, reformat | 20 | - | `tps` for high volume |
-| **Analytical** | compare, analyze, justify | 38 | - | `context_window` for long docs |
-| **Tool-using** | API calls, DB queries, code execution | 35 | 35 | `tool_call = true` |
-| **Agentic** | plan, decompose, orchestrate, self-critique | 48 | 42 | `tool_call`, `reasoning`, large `context_window` |
+| **Analytical** | compare, analyze, justify | 38 | - | `context_window` (models table) for long docs |
+| **Tool-using** | API calls, DB queries, code execution | 35 | 35 | `tool_call` (models table) |
+| **Agentic** | plan, decompose, orchestrate, self-critique | 48 | 42 | `tool_call`, `reasoning`, `context_window` (all in models table) |
 
 ## Additional Selection Factors
 
 Beyond skill type thresholds, consider these constraints when relevant:
 
-| Factor | Column | When to Use |
-|--------|--------|-------------|
-| Context window | `context_window` | Long documents (>32k tokens), RAG with large chunks |
-| Tool calling | `tool_call` | Function calling, MCP servers, API integration |
-| Structured output | `structured_output` | JSON responses, typed outputs, schema validation |
-| Reasoning | `reasoning` | Complex multi-step problems, chain-of-thought |
-| Latency | `latency` | Real-time chat, streaming UIs (want < 0.5s) |
-| Throughput | `tps` | Batch processing, high volume (want > 100 tps) |
-| Open weights | `open_weights` | Self-hosting, fine-tuning, data privacy |
+| Factor | Table | Column | When to Use |
+|--------|-------|--------|-------------|
+| Context window | `models` | `context_window` | Long documents (>32k tokens), RAG with large chunks |
+| Tool calling | `models` | `tool_call` | Function calling, MCP servers, API integration |
+| Structured output | `models` | `structured_output` | JSON responses, typed outputs, schema validation |
+| Reasoning | `models` | `reasoning` | Complex multi-step problems, chain-of-thought |
+| Latency | `benchmarks` | `latency` | Real-time chat, streaming UIs (want < 0.5s) |
+| Throughput | `benchmarks` | `tps` | Batch processing, high volume (want > 100 tps) |
+| Open weights | `models` | `open_weights` | Self-hosting, fine-tuning, data privacy |
 
-> **Note:** Capability fields require `models_dev_matched = true` (~53% of models have this data). Models without capability data will have NULL values for these fields.
+> **Note:** The `benchmarks` table contains AA benchmark data (intelligence, coding, price, tps). Capability fields (tool_call, reasoning, context_window) are in the `models` table from models.dev.
 
 ## Weighted Scoring
 
@@ -118,7 +118,7 @@ Score = (intelligence × quality_weight)
 # Balanced scoring for analytical tasks
 which-llm query "SELECT name, intelligence, price, tps,
           ROUND((intelligence * 0.4) + (100/price * 0.4) + (tps/10 * 0.2), 1) as score
-          FROM llms 
+          FROM benchmarks 
           WHERE intelligence >= 38 AND price > 0
           ORDER BY score DESC 
           LIMIT 10"
@@ -126,7 +126,7 @@ which-llm query "SELECT name, intelligence, price, tps,
 # Cost-priority scoring
 which-llm query "SELECT name, intelligence, price, tps,
           ROUND((intelligence * 0.2) + (100/price * 0.7) + (tps/10 * 0.1), 1) as score
-          FROM llms 
+          FROM benchmarks 
           WHERE intelligence >= 38 AND price > 0
           ORDER BY score DESC 
           LIMIT 10"
@@ -136,35 +136,120 @@ See [references/QUERIES.md](references/QUERIES.md) for more weighted scoring pat
 
 ## Core Queries
 
+### Two-Table Architecture
+
+The CLI provides two independent tables:
+
+1. **`benchmarks` table** - Benchmark data from Artificial Analysis
+   - Contains: intelligence, coding, math, pricing (input_price, output_price), performance (tps, latency)
+   - Use for: Model selection based on benchmarks and pricing
+
+2. **`models` table** - Capability data from models.dev
+   - Contains: tool_call, reasoning, structured_output, context_window, provider info
+   - Use for: Filtering by capabilities, finding providers for a model
+
+### The `benchmarks` Table (Benchmarks & Pricing)
+
+The `benchmarks` table contains benchmark scores and pricing from Artificial Analysis.
+
 ```bash
-# Find models meeting requirements, sorted by price
+# Find models meeting benchmark requirements, sorted by price
 which-llm query "SELECT name, creator, intelligence, coding, price, tps 
-          FROM llms 
+          FROM benchmarks 
           WHERE intelligence >= 38 
           ORDER BY price 
           LIMIT 10"
 
-# Tool-using tasks: require tool_call support
-which-llm query "SELECT name, creator, intelligence, coding, tool_call, price 
-          FROM llms 
-          WHERE intelligence >= 35 AND coding >= 35 AND tool_call = true
-          ORDER BY price 
-          LIMIT 10"
-
-# Agentic tasks: high capability + tool calling + large context
-which-llm query "SELECT name, creator, intelligence, coding, context_window, price 
-          FROM llms 
-          WHERE intelligence >= 48 AND coding >= 42 
-            AND tool_call = true AND context_window >= 128000
+# Find high-capability models for agentic tasks
+which-llm query "SELECT name, creator, intelligence, coding, price 
+          FROM benchmarks 
+          WHERE intelligence >= 48 AND coding >= 42
           ORDER BY price 
           LIMIT 10"
 
 # Speed-critical (real-time chat)
 which-llm query "SELECT name, intelligence, tps, latency, price 
-          FROM llms 
+          FROM benchmarks 
           WHERE tps > 100 AND latency < 0.5 
           ORDER BY tps DESC"
 ```
+
+### The `models` Table (Capabilities & Provider Data)
+
+The `models` table contains capability data and provider-specific information from models.dev.
+
+**Use `models` when:**
+- Filtering by capabilities (tool_call, reasoning, structured_output)
+- Finding models with specific context lengths
+- Finding alternative providers for a model
+- Comparing provider-specific pricing
+- Getting provider configuration info (env vars, API endpoints, npm packages)
+
+**Key columns:**
+- `provider_id`, `provider_name` - Provider identification
+- `provider_env` - Comma-separated env vars needed (e.g., `OPENAI_API_KEY`)
+- `provider_npm` - npm package for Vercel AI SDK (e.g., `@ai-sdk/openai`)
+- `provider_api` - API endpoint URL
+- `provider_doc` - Documentation URL
+- `model_id`, `model_name`, `family` - Model identification
+- `tool_call`, `reasoning`, `structured_output` - Capability flags
+- `context_window`, `max_input_tokens`, `max_output_tokens` - Context limits
+- `cost_input`, `cost_output` - Per-million-token pricing
+- `cost_cache_read`, `cost_cache_write` - Prompt caching pricing
+
+```bash
+# Find models with tool calling support
+which-llm query "SELECT provider_name, model_id, tool_call, context_window, cost_input 
+          FROM models 
+          WHERE tool_call = true
+          ORDER BY cost_input LIMIT 10"
+
+# Find reasoning models with large context
+which-llm query "SELECT provider_name, model_id, reasoning, context_window, cost_input 
+          FROM models 
+          WHERE reasoning = true AND context_window >= 128000
+          ORDER BY cost_input LIMIT 10"
+
+# Find all providers offering Claude models
+which-llm query "SELECT provider_name, model_id, cost_input, cost_output 
+          FROM models 
+          WHERE model_name LIKE '%Claude%'
+          ORDER BY cost_input"
+
+# Find cheapest provider for a specific model family
+which-llm query "SELECT provider_name, model_id, cost_input, cost_output
+          FROM models
+          WHERE family = 'claude-3.5'
+          ORDER BY cost_input LIMIT 5"
+
+# Get provider configuration for OpenAI
+which-llm query "SELECT provider_env, provider_npm, provider_api, provider_doc
+          FROM models
+          WHERE provider_id = 'openai'
+          LIMIT 1"
+
+# Find models with cache pricing
+which-llm query "SELECT provider_name, model_id, cost_cache_read, cost_cache_write
+          FROM models
+          WHERE cost_cache_read IS NOT NULL
+          ORDER BY cost_cache_read LIMIT 10"
+```
+
+### Cross-Table Queries
+
+Since the tables are independent, you may need to query both to make a complete decision:
+
+```bash
+# Step 1: Find high-capability models from benchmarks table
+which-llm query "SELECT name, intelligence, coding, price FROM benchmarks 
+          WHERE intelligence >= 45 ORDER BY price LIMIT 5"
+
+# Step 2: Check capabilities for a specific model in models table
+which-llm query "SELECT model_id, tool_call, reasoning, context_window FROM models 
+          WHERE model_name LIKE '%GPT-4o%'"
+```
+
+**Note:** Model naming may differ between tables (e.g., `claude-3.5-sonnet` in benchmarks vs `claude-3-5-sonnet-20241022` in models). Use LIKE with wildcards for fuzzy matching when cross-referencing.
 
 ## Compare Models
 

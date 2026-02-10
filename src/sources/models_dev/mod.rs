@@ -7,3 +7,4 @@ pub mod models;
 pub mod schema;
 
 pub use client::ModelsDevClient;
+pub use schema::MODELS;

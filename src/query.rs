@@ -675,13 +675,13 @@ mod tests {
         let executor = QueryExecutor::new(temp_dir.path().to_path_buf());
 
         // Create a dummy parquet file
-        std::fs::write(temp_dir.path().join("llms.parquet"), b"dummy").unwrap();
+        std::fs::write(temp_dir.path().join("benchmarks.parquet"), b"dummy").unwrap();
 
-        let sql = "SELECT * FROM llms WHERE intelligence > 40";
+        let sql = "SELECT * FROM benchmarks WHERE intelligence > 40";
         let result = executor.substitute_aliases(sql).unwrap();
 
         assert!(result.contains("read_parquet("));
-        assert!(result.contains("llms.parquet"));
+        assert!(result.contains("benchmarks.parquet"));
     }
 
     #[test]
@@ -689,7 +689,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let executor = QueryExecutor::new(temp_dir.path().to_path_buf());
 
-        let sql = "SELECT * FROM llms";
+        let sql = "SELECT * FROM benchmarks";
         let result = executor.substitute_aliases(sql);
 
         assert!(result.is_err());
@@ -704,14 +704,14 @@ mod tests {
         let executor = QueryExecutor::new(temp_dir.path().to_path_buf());
 
         // Create a dummy parquet file
-        std::fs::write(temp_dir.path().join("llms.parquet"), b"dummy").unwrap();
+        std::fs::write(temp_dir.path().join("benchmarks.parquet"), b"dummy").unwrap();
 
         // String literal should NOT be replaced
-        let sql = "SELECT 'llms' AS table_name FROM llms";
+        let sql = "SELECT 'benchmarks' AS table_name FROM benchmarks";
         let result = executor.substitute_aliases(sql).unwrap();
 
-        // The string literal 'llms' should be preserved
-        assert!(result.contains("'llms'"));
+        // The string literal 'benchmarks' should be preserved
+        assert!(result.contains("'benchmarks'"));
         // But the table reference should be replaced
         assert!(result.contains("read_parquet("));
     }
@@ -719,13 +719,13 @@ mod tests {
     #[test]
     fn test_replace_table_name_safe() {
         // Test that string literals are preserved
-        let sql = "SELECT 'llms' FROM llms";
-        let result = replace_table_name_safe(sql, "llms", "REPLACED");
-        assert_eq!(result, "SELECT 'llms' FROM REPLACED");
+        let sql = "SELECT 'benchmarks' FROM benchmarks";
+        let result = replace_table_name_safe(sql, "benchmarks", "REPLACED");
+        assert_eq!(result, "SELECT 'benchmarks' FROM REPLACED");
 
         // Test case insensitivity
-        let sql = "SELECT * FROM LLMS";
-        let result = replace_table_name_safe(sql, "llms", "REPLACED");
+        let sql = "SELECT * FROM BENCHMARKS";
+        let result = replace_table_name_safe(sql, "benchmarks", "REPLACED");
         assert_eq!(result, "SELECT * FROM REPLACED");
     }
 
@@ -734,15 +734,15 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
 
         // Create one parquet file
-        std::fs::write(temp_dir.path().join("llms.parquet"), b"dummy").unwrap();
+        std::fs::write(temp_dir.path().join("benchmarks.parquet"), b"dummy").unwrap();
 
         let executor = QueryExecutor::new(temp_dir.path().to_path_buf());
         let tables = executor.list_tables();
 
-        assert_eq!(tables.len(), 6);
+        assert_eq!(tables.len(), 7);
 
-        let llms = tables.iter().find(|t| t.name == "llms").unwrap();
-        assert!(llms.exists);
+        let benchmarks = tables.iter().find(|t| t.name == "benchmarks").unwrap();
+        assert!(benchmarks.exists);
 
         let text_to_image = tables.iter().find(|t| t.name == "text_to_image").unwrap();
         assert!(!text_to_image.exists);

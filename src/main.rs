@@ -4,7 +4,7 @@ use clap::Parser;
 use which_llm::{
     cli::{CacheCommands, Cli, Commands, ProfileCommands, SkillCommands},
     client::{Client, HostedDataClient},
-    commands::{self, llms::CapabilityFilters},
+    commands,
     config::Config,
     error::Result,
 };
@@ -141,22 +141,7 @@ async fn run_with_hosted_client(
             model,
             creator,
             sort,
-            reasoning,
-            tool_call,
-            structured_output,
-            attachment,
-            min_context,
-            modality,
         } => {
-            let capability_filters = CapabilityFilters {
-                reasoning: *reasoning,
-                tool_call: *tool_call,
-                structured_output: *structured_output,
-                attachment: *attachment,
-                min_context: *min_context,
-                modality: modality.clone(),
-            };
-
             commands::llms::run_hosted(
                 client,
                 cli.refresh,
@@ -164,10 +149,9 @@ async fn run_with_hosted_client(
                 model.as_deref(),
                 creator.as_deref(),
                 sort.as_deref(),
-                capability_filters,
             )
             .await?;
-            Some("llms")
+            Some("benchmarks")
         }
         Commands::TextToImage { categories } => {
             let models = client.get_text_to_image(cli.refresh).await?;
@@ -235,22 +219,7 @@ async fn run_with_api_client(
             model,
             creator,
             sort,
-            reasoning,
-            tool_call,
-            structured_output,
-            attachment,
-            min_context,
-            modality,
         } => {
-            let capability_filters = CapabilityFilters {
-                reasoning: *reasoning,
-                tool_call: *tool_call,
-                structured_output: *structured_output,
-                attachment: *attachment,
-                min_context: *min_context,
-                modality: modality.clone(),
-            };
-
             commands::llms::run(
                 client,
                 cli.refresh,
@@ -258,10 +227,9 @@ async fn run_with_api_client(
                 model.as_deref(),
                 creator.as_deref(),
                 sort.as_deref(),
-                capability_filters,
             )
             .await?;
-            Some("llms")
+            Some("benchmarks")
         }
         Commands::TextToImage { categories } => {
             commands::media::run_text_to_image(client, cli.refresh, format, *categories).await?;

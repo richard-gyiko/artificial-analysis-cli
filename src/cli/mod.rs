@@ -62,7 +62,7 @@ impl Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// List and query LLM models
+    /// List and query LLM models (benchmarks, performance, pricing from Artificial Analysis)
     Llms {
         /// Filter by model slug
         #[arg(long, short = 'm')]
@@ -72,34 +72,9 @@ pub enum Commands {
         #[arg(long, short = 'c')]
         creator: Option<String>,
 
-        /// Sort by field (intelligence, price, speed, context)
+        /// Sort by field (intelligence, price, speed)
         #[arg(long, short = 's')]
         sort: Option<String>,
-
-        // Capability filters
-        /// Filter by reasoning support (chain-of-thought models)
-        #[arg(long)]
-        reasoning: bool,
-
-        /// Filter by tool/function calling support
-        #[arg(long)]
-        tool_call: bool,
-
-        /// Filter by structured JSON output support
-        #[arg(long)]
-        structured_output: bool,
-
-        /// Filter by file attachment support
-        #[arg(long)]
-        attachment: bool,
-
-        /// Filter by minimum context window (tokens)
-        #[arg(long)]
-        min_context: Option<u64>,
-
-        /// Filter by modality (e.g., "input:image", "output:text")
-        #[arg(long)]
-        modality: Option<String>,
     },
 
     /// Compare multiple models side by side

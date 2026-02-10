@@ -6,7 +6,6 @@ pub mod client;
 pub mod commands;
 pub mod config;
 pub mod error;
-pub mod merge;
 pub mod models;
 pub mod output;
 pub mod parquet;

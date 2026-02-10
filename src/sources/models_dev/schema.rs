@@ -1,13 +1,16 @@
-//! Parquet schema for models.dev raw data.
+//! Parquet schema for models data (from models.dev).
 
 use crate::schema::{Column, TableDef};
 
-/// Raw models.dev table schema (internal use only).
-pub const MODELS_DEV: TableDef = TableDef {
-    name: "models_dev",
-    command: "", // Internal table, not user-facing
-    parquet_file: "models_dev.parquet",
+/// Models table schema - models with capabilities from models.dev.
+/// Each row represents a model available from a specific provider with
+/// capabilities, context limits, and provider-specific pricing.
+pub const MODELS: TableDef = TableDef {
+    name: "models",
+    command: "which-llm query 'SELECT * FROM models'",
+    parquet_file: "models.parquet",
     columns: &[
+        // Provider identity
         Column {
             name: "provider_id",
             sql_type: "VARCHAR",
@@ -18,6 +21,28 @@ pub const MODELS_DEV: TableDef = TableDef {
             sql_type: "VARCHAR",
             nullable: false,
         },
+        // Provider metadata
+        Column {
+            name: "provider_env",
+            sql_type: "VARCHAR",
+            nullable: true,
+        },
+        Column {
+            name: "provider_npm",
+            sql_type: "VARCHAR",
+            nullable: true,
+        },
+        Column {
+            name: "provider_api",
+            sql_type: "VARCHAR",
+            nullable: true,
+        },
+        Column {
+            name: "provider_doc",
+            sql_type: "VARCHAR",
+            nullable: true,
+        },
+        // Model identity
         Column {
             name: "model_id",
             sql_type: "VARCHAR",
@@ -101,7 +126,7 @@ pub const MODELS_DEV: TableDef = TableDef {
             sql_type: "BIGINT",
             nullable: true,
         },
-        // Cost
+        // Cost (per million tokens)
         Column {
             name: "cost_input",
             sql_type: "DOUBLE",
@@ -109,6 +134,16 @@ pub const MODELS_DEV: TableDef = TableDef {
         },
         Column {
             name: "cost_output",
+            sql_type: "DOUBLE",
+            nullable: true,
+        },
+        Column {
+            name: "cost_cache_read",
+            sql_type: "DOUBLE",
+            nullable: true,
+        },
+        Column {
+            name: "cost_cache_write",
             sql_type: "DOUBLE",
             nullable: true,
         },

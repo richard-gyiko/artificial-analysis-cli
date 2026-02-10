@@ -1,12 +1,12 @@
-//! Parquet schema for Artificial Analysis raw data.
+//! Parquet schema for Artificial Analysis benchmark data.
 
 use crate::schema::{Column, TableDef};
 
-/// Raw AA LLMs table schema (internal use only).
-pub const AA_LLMS: TableDef = TableDef {
-    name: "aa_llms",
-    command: "", // Internal table, not user-facing
-    parquet_file: "aa_llms.parquet",
+/// Benchmarks table schema (from Artificial Analysis).
+pub const BENCHMARKS: TableDef = TableDef {
+    name: "benchmarks",
+    command: "which-llm llms",
+    parquet_file: "benchmarks.parquet",
     columns: &[
         Column {
             name: "id",
