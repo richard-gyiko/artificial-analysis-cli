@@ -265,7 +265,7 @@ impl Client {
         }
 
         // Convert to LlmModel for return
-        let models: Vec<LlmModel> = aa_models.iter().map(|m| aa_to_llm_model(m)).collect();
+        let models: Vec<LlmModel> = aa_models.iter().map(aa_to_llm_model).collect();
 
         Ok(models)
     }
