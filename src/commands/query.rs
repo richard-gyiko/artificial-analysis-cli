@@ -23,9 +23,11 @@ pub fn run(sql: Option<&str>, tables: bool, format: OutputFormat) -> Result<()> 
         None => {
             eprintln!("Error: No SQL query provided.");
             eprintln!();
-            eprintln!("Usage: aa query \"SELECT * FROM llms WHERE intelligence > 40\"");
+            eprintln!(
+                "Usage: which-llm query \"SELECT * FROM benchmarks WHERE intelligence > 40\""
+            );
             eprintln!();
-            eprintln!("Use 'aa query --tables' to see available tables.");
+            eprintln!("Use 'which-llm tables' to see available tables.");
             return Ok(());
         }
     };

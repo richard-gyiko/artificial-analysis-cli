@@ -1,26 +1,24 @@
-//! Unified API client for fetching and merging data from multiple sources.
+//! Unified API client for fetching data from multiple sources.
 //!
 //! This module provides two client types:
 //! - `HostedDataClient`: Uses pre-built data from GitHub Releases (no API key needed)
 //! - `Client`: Uses direct API access (requires API key)
+//!
+//! Architecture: Two independent tables with no pre-computed merge.
+//! - `benchmarks`: Pure Artificial Analysis data (benchmarks, performance, pricing)
+//! - `models`: Pure models.dev data (capabilities, limits, provider info)
 
 use crate::cache::Cache;
 use crate::error::{AppError, Result};
-use crate::merge::merge_models;
 use crate::models::{LlmModel, MediaModel};
 use crate::parquet;
 use crate::remote::RemoteDataClient;
 use crate::sources::artificial_analysis::models::{AaLlmModel, AaLlmRow};
 use crate::sources::artificial_analysis::AaClient;
-use crate::sources::models_dev::models::{flatten_response, ModelsDevResponse, ModelsDevRow};
+use crate::sources::models_dev::models::{flatten_response, ModelsDevRow};
 use crate::sources::models_dev::ModelsDevClient;
-use chrono::{Duration, Utc};
 use duckdb::Connection;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-
-/// TTL for models.dev cache (24 hours).
-const MODELS_DEV_TTL_HOURS: i64 = 24;
+use std::path::Path;
 
 /// Client for fetching data using hosted GitHub Releases.
 /// This is the default mode that requires no API key.
@@ -50,7 +48,7 @@ impl HostedDataClient {
     /// Fetch LLM models from hosted data.
     pub async fn get_llm_models(&self, refresh: bool) -> Result<Vec<LlmModel>> {
         // Ensure we have the data
-        let parquet_path = self.remote.ensure_parquet("llms", refresh).await?;
+        let parquet_path = self.remote.ensure_parquet("benchmarks", refresh).await?;
 
         // Load from parquet
         self.load_llms_from_parquet(&parquet_path)
@@ -67,11 +65,7 @@ impl HostedDataClient {
                 id, name, slug, creator, creator_slug, release_date,
                 intelligence, coding, math, mmlu_pro, gpqa, hle,
                 livecodebench, scicode, math_500, aime,
-                input_price, output_price, price, tps, latency,
-                reasoning, tool_call, structured_output, attachment, temperature,
-                context_window, max_input_tokens, max_output_tokens,
-                input_modalities, output_modalities,
-                knowledge_cutoff, open_weights, last_updated, models_dev_matched
+                input_price, output_price, price, tps, latency
             FROM read_parquet('{}')"#,
             path_str
         );
@@ -103,24 +97,6 @@ impl HostedDataClient {
                     price: row.get(18)?,
                     tps: row.get(19)?,
                     latency: row.get(20)?,
-                    reasoning: row.get(21)?,
-                    tool_call: row.get(22)?,
-                    structured_output: row.get(23)?,
-                    attachment: row.get(24)?,
-                    temperature: row.get(25)?,
-                    context_window: row.get::<_, Option<i64>>(26)?.map(|v| v as u64),
-                    max_input_tokens: row.get::<_, Option<i64>>(27)?.map(|v| v as u64),
-                    max_output_tokens: row.get::<_, Option<i64>>(28)?.map(|v| v as u64),
-                    input_modalities: row
-                        .get::<_, Option<String>>(29)?
-                        .map(|s| s.split(',').map(String::from).collect()),
-                    output_modalities: row
-                        .get::<_, Option<String>>(30)?
-                        .map(|s| s.split(',').map(String::from).collect()),
-                    knowledge_cutoff: row.get(31)?,
-                    open_weights: row.get(32)?,
-                    last_updated: row.get(33)?,
-                    models_dev_matched: row.get(34)?,
                 })
             })
             .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?
@@ -213,10 +189,22 @@ impl HostedDataClient {
             .await?;
         self.load_media_from_parquet(&parquet_path)
     }
+
+    /// Refresh models.dev data.
+    pub async fn refresh_models(&self) -> Result<()> {
+        let _ = self.remote.ensure_parquet("models", true).await?;
+        Ok(())
+    }
 }
 
 /// Unified client that fetches from both AA and models.dev APIs.
 /// Requires an API key for Artificial Analysis.
+///
+/// This client maintains two independent caches:
+/// - `benchmarks.parquet`: Artificial Analysis data
+/// - `models.parquet`: models.dev data
+///
+/// No merge is performed - each table is independent.
 pub struct Client {
     aa_client: AaClient,
     md_client: ModelsDevClient,
@@ -242,83 +230,58 @@ impl Client {
         &self.cache
     }
 
-    // ========== LLM Data (Three-Layer Cache) ==========
+    // ========== LLM Data (Pure AA) ==========
 
-    /// Fetch merged LLM models.
+    /// Fetch LLM models from Artificial Analysis.
     ///
-    /// This implements the three-layer cache architecture:
-    /// 1. Check if merged cache is valid (both sources cached and not expired)
-    /// 2. Fetch/use cached AA data
-    /// 3. Fetch/use cached models.dev data (with 24h TTL)
-    /// 4. Merge and cache the result
+    /// Returns pure AA data without any models.dev merge.
+    /// For capability data, query the `models` table separately.
+    ///
+    /// When `refresh=true`, also refreshes the models.dev data for the `models` table.
     pub async fn get_llm_models(&self, refresh: bool) -> Result<Vec<LlmModel>> {
-        let merged_path = self.cache.parquet_path("llms");
-        let aa_path = self.cache.parquet_path("aa_llms");
-        let md_path = self.cache.parquet_path("models_dev");
-        let meta_path = self.models_dev_meta_path();
+        let benchmarks_path = self.cache.parquet_path("benchmarks");
 
-        // Quick path: if not refreshing and all caches exist and models.dev not expired,
-        // we can skip fetching entirely and just load merged cache
-        if !refresh
-            && merged_path.exists()
-            && aa_path.exists()
-            && md_path.exists()
-            && !self.is_models_dev_expired(&meta_path)
-        {
-            // Load from merged parquet cache
-            if let Ok(models) = self.load_merged_cache(&merged_path) {
+        // Quick path: if not refreshing and cache exists, load from cache
+        if !refresh && benchmarks_path.exists() {
+            if let Ok(models) = self.load_llms_from_parquet(&benchmarks_path) {
                 return Ok(models);
             }
         }
 
         // Fetch AA data
-        let aa_models = self.fetch_aa_llms(refresh).await?;
-        let aa_changed = refresh || !aa_path.exists();
+        let aa_models = self.aa_client.fetch_llm_models(refresh).await?;
 
-        // Fetch models.dev data (with TTL check)
-        let md_providers = self.fetch_models_dev_if_needed().await;
-        let md_changed = self.is_models_dev_changed(&md_path);
+        // Convert to rows and write to parquet
+        let rows: Vec<AaLlmRow> = aa_models.iter().map(AaLlmRow::from).collect();
+        if let Err(e) = parquet::write_benchmarks_parquet(&rows, &benchmarks_path) {
+            eprintln!("Warning: Failed to write benchmarks Parquet cache: {}", e);
+        }
 
-        // Merge data
-        let merged = match &md_providers {
-            Ok(providers) => merge_models(&aa_models, providers),
-            Err(e) => {
-                // Log warning but continue with AA-only data
-                eprintln!(
-                    "Warning: Could not fetch models.dev data: {}. Using AA data only.",
-                    e
-                );
-                merge_models(&aa_models, &HashMap::new())
-            }
-        };
-
-        // Write merged parquet if either source changed or merged doesn't exist
-        if aa_changed || md_changed || !merged_path.exists() {
-            if let Err(e) = parquet::write_llms_parquet(&merged, &merged_path) {
-                eprintln!("Warning: Failed to write merged Parquet cache: {}", e);
+        // Also refresh models.dev data when refreshing
+        if refresh {
+            if let Err(e) = self.refresh_models().await {
+                eprintln!("Warning: Failed to refresh models.dev data: {}", e);
             }
         }
 
-        Ok(merged)
+        // Convert to LlmModel for return
+        let models: Vec<LlmModel> = aa_models.iter().map(aa_to_llm_model).collect();
+
+        Ok(models)
     }
 
-    /// Load merged LLM models from parquet cache.
-    fn load_merged_cache(&self, path: &Path) -> Result<Vec<LlmModel>> {
+    /// Load LLM models from parquet cache.
+    fn load_llms_from_parquet(&self, path: &Path) -> Result<Vec<LlmModel>> {
         let conn = Connection::open_in_memory()
             .map_err(|e| crate::error::AppError::Cache(format!("DuckDB error: {}", e)))?;
 
         let path_str = path.to_string_lossy();
-        // Use explicit column names to be resilient to schema changes
         let sql = format!(
             r#"SELECT
                 id, name, slug, creator, creator_slug, release_date,
                 intelligence, coding, math, mmlu_pro, gpqa, hle,
                 livecodebench, scicode, math_500, aime,
-                input_price, output_price, price, tps, latency,
-                reasoning, tool_call, structured_output, attachment, temperature,
-                context_window, max_input_tokens, max_output_tokens,
-                input_modalities, output_modalities,
-                knowledge_cutoff, open_weights, last_updated, models_dev_matched
+                input_price, output_price, price, tps, latency
             FROM read_parquet('{}')"#,
             path_str
         );
@@ -350,24 +313,6 @@ impl Client {
                     price: row.get(18)?,
                     tps: row.get(19)?,
                     latency: row.get(20)?,
-                    reasoning: row.get(21)?,
-                    tool_call: row.get(22)?,
-                    structured_output: row.get(23)?,
-                    attachment: row.get(24)?,
-                    temperature: row.get(25)?,
-                    context_window: row.get::<_, Option<i64>>(26)?.map(|v| v as u64),
-                    max_input_tokens: row.get::<_, Option<i64>>(27)?.map(|v| v as u64),
-                    max_output_tokens: row.get::<_, Option<i64>>(28)?.map(|v| v as u64),
-                    input_modalities: row
-                        .get::<_, Option<String>>(29)?
-                        .map(|s| s.split(',').map(String::from).collect()),
-                    output_modalities: row
-                        .get::<_, Option<String>>(30)?
-                        .map(|s| s.split(',').map(String::from).collect()),
-                    knowledge_cutoff: row.get(31)?,
-                    open_weights: row.get(32)?,
-                    last_updated: row.get(33)?,
-                    models_dev_matched: row.get(34)?,
                 })
             })
             .map_err(|e| crate::error::AppError::Cache(format!("DuckDB error: {}", e)))?
@@ -377,111 +322,26 @@ impl Client {
         Ok(models)
     }
 
-    /// Fetch AA LLM models and write to cache.
-    async fn fetch_aa_llms(&self, refresh: bool) -> Result<Vec<AaLlmModel>> {
-        let models = self.aa_client.fetch_llm_models(refresh).await?;
+    // ========== Models Data (Pure models.dev) ==========
 
-        // Write raw AA data to parquet
-        let aa_path = self.cache.parquet_path("aa_llms");
-        let rows: Vec<AaLlmRow> = models.iter().map(AaLlmRow::from).collect();
-        if let Err(e) = parquet::write_aa_llms_parquet(&rows, &aa_path) {
-            eprintln!("Warning: Failed to write AA Parquet cache: {}", e);
-        }
+    /// Fetch and cache models data from models.dev.
+    ///
+    /// This is called during `update` to refresh the models table.
+    pub async fn refresh_models(&self) -> Result<()> {
+        let models_path = self.cache.parquet_path("models");
 
-        Ok(models)
-    }
-
-    /// Fetch models.dev data if cache is expired or missing.
-    /// Falls back to stale cache on API error.
-    async fn fetch_models_dev_if_needed(&self) -> Result<ModelsDevResponse> {
-        let md_path = self.cache.parquet_path("models_dev");
-        let meta_path = self.models_dev_meta_path();
-
-        // Check if cache is valid (not expired)
-        if md_path.exists() && !self.is_models_dev_expired(&meta_path) {
-            // Try to load from cached response (JSON)
-            if let Some(cached) = self.load_models_dev_cache() {
-                return Ok(cached);
-            }
-        }
-
-        // Try to fetch fresh data
         match self.md_client.fetch().await {
             Ok(response) => {
-                // Write raw parquet
                 let rows: Vec<ModelsDevRow> = flatten_response(&response);
-                if let Err(e) = parquet::write_models_dev_parquet(&rows, &md_path) {
-                    eprintln!("Warning: Failed to write models.dev Parquet cache: {}", e);
+                if let Err(e) = parquet::write_models_parquet(&rows, &models_path) {
+                    eprintln!("Warning: Failed to write models Parquet cache: {}", e);
                 }
-
-                // Save JSON cache for quick reload
-                self.save_models_dev_cache(&response);
-
-                // Update metadata timestamp
-                self.update_models_dev_meta(&meta_path);
-
-                Ok(response)
+                Ok(())
             }
             Err(e) => {
-                // API failed - try to use stale cache as fallback
-                if let Some(cached) = self.load_models_dev_cache() {
-                    eprintln!("Warning: models.dev API failed ({}), using stale cache.", e);
-                    return Ok(cached);
-                }
-                // No stale cache available, propagate the error
+                eprintln!("Warning: Could not fetch models.dev data: {}", e);
                 Err(e)
             }
-        }
-    }
-
-    /// Check if models.dev cache is expired.
-    fn is_models_dev_expired(&self, meta_path: &PathBuf) -> bool {
-        if !meta_path.exists() {
-            return true;
-        }
-
-        if let Ok(content) = std::fs::read_to_string(meta_path) {
-            if let Ok(timestamp) = content.trim().parse::<i64>() {
-                let cached_at = chrono::DateTime::from_timestamp(timestamp, 0);
-                if let Some(cached_at) = cached_at {
-                    let age = Utc::now().signed_duration_since(cached_at);
-                    return age > Duration::hours(MODELS_DEV_TTL_HOURS);
-                }
-            }
-        }
-        true
-    }
-
-    /// Check if models.dev was recently updated.
-    fn is_models_dev_changed(&self, md_path: &Path) -> bool {
-        // Simple check: if the file was modified in this session
-        // For now, just check if it exists
-        !md_path.exists()
-    }
-
-    /// Get path to models.dev metadata file.
-    fn models_dev_meta_path(&self) -> PathBuf {
-        self.cache.base_dir().join("models_dev_meta.txt")
-    }
-
-    /// Update models.dev metadata timestamp.
-    fn update_models_dev_meta(&self, meta_path: &Path) {
-        let timestamp = Utc::now().timestamp().to_string();
-        let _ = std::fs::write(meta_path, timestamp);
-    }
-
-    /// Load models.dev response from JSON cache.
-    fn load_models_dev_cache(&self) -> Option<ModelsDevResponse> {
-        let cache_path = self.cache.base_dir().join("models_dev_cache.json");
-        let content = std::fs::read_to_string(cache_path).ok()?;
-        serde_json::from_str(&content).ok()
-    }
-
-    /// Save models.dev response to JSON cache.
-    fn save_models_dev_cache(&self, response: &ModelsDevResponse) {
-        let cache_path = self.cache.base_dir().join("models_dev_cache.json");
-        if let Ok(json) = serde_json::to_string(response) {
-            let _ = std::fs::write(cache_path, json);
         }
     }
 
@@ -535,5 +395,35 @@ impl Client {
             eprintln!("Warning: Failed to write Parquet cache: {}", e);
         }
         Ok(models)
+    }
+}
+
+/// Convert AA model to simplified LlmModel.
+fn aa_to_llm_model(aa: &AaLlmModel) -> LlmModel {
+    let evaluations = aa.evaluations.as_ref();
+    let pricing = aa.pricing.as_ref();
+
+    LlmModel {
+        id: aa.id.clone(),
+        name: aa.name.clone(),
+        slug: aa.slug.clone(),
+        release_date: aa.release_date.clone(),
+        creator: aa.model_creator.name.clone(),
+        creator_slug: aa.model_creator.slug.clone(),
+        intelligence: evaluations.and_then(|e| e.artificial_analysis_intelligence_index),
+        coding: evaluations.and_then(|e| e.artificial_analysis_coding_index),
+        math: evaluations.and_then(|e| e.artificial_analysis_math_index),
+        mmlu_pro: evaluations.and_then(|e| e.mmlu_pro),
+        gpqa: evaluations.and_then(|e| e.gpqa),
+        hle: evaluations.and_then(|e| e.hle),
+        livecodebench: evaluations.and_then(|e| e.livecodebench),
+        scicode: evaluations.and_then(|e| e.scicode),
+        math_500: evaluations.and_then(|e| e.math_500),
+        aime: evaluations.and_then(|e| e.aime),
+        input_price: pricing.and_then(|p| p.price_1m_input_tokens),
+        output_price: pricing.and_then(|p| p.price_1m_output_tokens),
+        price: pricing.and_then(|p| p.price_1m_blended_3_to_1),
+        tps: aa.median_output_tokens_per_second,
+        latency: aa.median_time_to_first_token_seconds,
     }
 }

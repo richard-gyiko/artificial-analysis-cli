@@ -3,12 +3,11 @@
 //! Writes data to Parquet files using DuckDB.
 
 use crate::error::{AppError, Result};
-use crate::models::{LlmModel, MediaModel};
-use crate::schema;
+use crate::models::MediaModel;
 use crate::sources::artificial_analysis::models::AaLlmRow;
-use crate::sources::artificial_analysis::schema::AA_LLMS;
+use crate::sources::artificial_analysis::schema::BENCHMARKS;
 use crate::sources::models_dev::models::ModelsDevRow;
-use crate::sources::models_dev::schema::MODELS_DEV;
+use crate::sources::models_dev::schema::MODELS;
 use duckdb::{params, Connection};
 use std::path::Path;
 
@@ -38,17 +37,19 @@ impl From<&MediaModel> for MediaRow {
     }
 }
 
-/// Write raw AA LLM data to Parquet.
-pub fn write_aa_llms_parquet(rows: &[AaLlmRow], path: &Path) -> Result<()> {
+/// Write benchmark data (from AA) to Parquet.
+///
+/// This writes the `benchmarks` table which contains Artificial Analysis data.
+pub fn write_benchmarks_parquet(rows: &[AaLlmRow], path: &Path) -> Result<()> {
     let conn = Connection::open_in_memory()
         .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
 
-    conn.execute(&AA_LLMS.create_table_sql(), [])
+    conn.execute(&BENCHMARKS.create_table_sql(), [])
         .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
 
     {
         let mut appender = conn
-            .appender(AA_LLMS.name)
+            .appender(BENCHMARKS.name)
             .map_err(|e| AppError::Cache(format!("DuckDB appender error: {}", e)))?;
 
         for row in rows {
@@ -82,7 +83,10 @@ pub fn write_aa_llms_parquet(rows: &[AaLlmRow], path: &Path) -> Result<()> {
 
     let path_str = path.to_string_lossy();
     conn.execute(
-        &format!("COPY {} TO '{}' (FORMAT PARQUET)", AA_LLMS.name, path_str),
+        &format!(
+            "COPY {} TO '{}' (FORMAT PARQUET)",
+            BENCHMARKS.name, path_str
+        ),
         [],
     )
     .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
@@ -90,42 +94,56 @@ pub fn write_aa_llms_parquet(rows: &[AaLlmRow], path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Write raw models.dev data to Parquet.
-pub fn write_models_dev_parquet(rows: &[ModelsDevRow], path: &Path) -> Result<()> {
+/// Write models data (from models.dev) to Parquet.
+pub fn write_models_parquet(rows: &[ModelsDevRow], path: &Path) -> Result<()> {
     let conn = Connection::open_in_memory()
         .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
 
-    conn.execute(&MODELS_DEV.create_table_sql(), [])
+    conn.execute(&MODELS.create_table_sql(), [])
         .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
 
     {
         let mut appender = conn
-            .appender(MODELS_DEV.name)
+            .appender(MODELS.name)
             .map_err(|e| AppError::Cache(format!("DuckDB appender error: {}", e)))?;
 
         for row in rows {
             appender
                 .append_row(params![
+                    // Provider identity
                     row.provider_id,
                     row.provider_name,
+                    // Provider metadata
+                    row.provider_env,
+                    row.provider_npm,
+                    row.provider_api,
+                    row.provider_doc,
+                    // Model identity
                     row.model_id,
                     row.model_name,
                     row.family,
+                    // Capabilities
                     row.attachment,
                     row.reasoning,
                     row.tool_call,
                     row.structured_output,
                     row.temperature,
+                    // Metadata
                     row.knowledge,
                     row.release_date,
                     row.last_updated,
                     row.open_weights,
                     row.status,
+                    // Limits
                     row.context_window.map(|v| v as i64),
                     row.max_input_tokens.map(|v| v as i64),
                     row.max_output_tokens.map(|v| v as i64),
+                    // Costs
                     row.cost_input,
                     row.cost_output,
+                    row.cost_cache_read,
+                    row.cost_cache_write,
+                    // Modalities
                     row.input_modalities,
                     row.output_modalities,
                 ])
@@ -135,80 +153,7 @@ pub fn write_models_dev_parquet(rows: &[ModelsDevRow], path: &Path) -> Result<()
 
     let path_str = path.to_string_lossy();
     conn.execute(
-        &format!(
-            "COPY {} TO '{}' (FORMAT PARQUET)",
-            MODELS_DEV.name, path_str
-        ),
-        [],
-    )
-    .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
-
-    Ok(())
-}
-
-/// Write merged LLM data to Parquet.
-pub fn write_llms_parquet(models: &[LlmModel], path: &Path) -> Result<()> {
-    let conn = Connection::open_in_memory()
-        .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
-
-    conn.execute(&schema::LLMS.create_table_sql(), [])
-        .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
-
-    {
-        let mut appender = conn
-            .appender(schema::LLMS.name)
-            .map_err(|e| AppError::Cache(format!("DuckDB appender error: {}", e)))?;
-
-        for model in models {
-            appender
-                .append_row(params![
-                    model.id,
-                    model.name,
-                    model.slug,
-                    model.creator,
-                    model.creator_slug,
-                    model.release_date,
-                    model.intelligence,
-                    model.coding,
-                    model.math,
-                    model.mmlu_pro,
-                    model.gpqa,
-                    model.hle,
-                    model.livecodebench,
-                    model.scicode,
-                    model.math_500,
-                    model.aime,
-                    model.input_price,
-                    model.output_price,
-                    model.price,
-                    model.tps,
-                    model.latency,
-                    model.reasoning,
-                    model.tool_call,
-                    model.structured_output,
-                    model.attachment,
-                    model.temperature,
-                    model.context_window.map(|v| v as i64),
-                    model.max_input_tokens.map(|v| v as i64),
-                    model.max_output_tokens.map(|v| v as i64),
-                    model.input_modalities.as_ref().map(|v| v.join(",")),
-                    model.output_modalities.as_ref().map(|v| v.join(",")),
-                    model.knowledge_cutoff,
-                    model.open_weights,
-                    model.last_updated,
-                    model.models_dev_matched,
-                ])
-                .map_err(|e| AppError::Cache(format!("DuckDB append error: {}", e)))?;
-        }
-    }
-
-    let path_str = path.to_string_lossy();
-    conn.execute(
-        &format!(
-            "COPY {} TO '{}' (FORMAT PARQUET)",
-            schema::LLMS.name,
-            path_str
-        ),
+        &format!("COPY {} TO '{}' (FORMAT PARQUET)", MODELS.name, path_str),
         [],
     )
     .map_err(|e| AppError::Cache(format!("DuckDB error: {}", e)))?;
@@ -271,14 +216,14 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    fn make_test_llm_model() -> LlmModel {
-        LlmModel {
+    fn make_test_aa_row() -> AaLlmRow {
+        AaLlmRow {
             id: "test-id".to_string(),
             name: "GPT-4o".to_string(),
             slug: "gpt-4o".to_string(),
-            release_date: Some("2024-05-13".to_string()),
             creator: "OpenAI".to_string(),
             creator_slug: Some("openai".to_string()),
+            release_date: Some("2024-05-13".to_string()),
             intelligence: Some(55.0),
             coding: Some(50.0),
             math: Some(60.0),
@@ -294,34 +239,86 @@ mod tests {
             price: Some(5.0),
             tps: Some(150.0),
             latency: Some(0.5),
-            reasoning: Some(false),
-            tool_call: Some(true),
-            structured_output: Some(true),
-            attachment: Some(true),
-            temperature: Some(true),
-            context_window: Some(128000),
-            max_input_tokens: None,
-            max_output_tokens: Some(16384),
-            input_modalities: Some(vec!["text".to_string(), "image".to_string()]),
-            output_modalities: Some(vec!["text".to_string()]),
-            knowledge_cutoff: Some("2024-04".to_string()),
-            open_weights: Some(false),
-            last_updated: Some("2024-11-20".to_string()),
-            models_dev_matched: true,
         }
     }
 
     #[test]
-    fn test_write_llms_parquet() {
+    fn test_write_benchmarks_parquet() {
         let temp_dir = TempDir::new().unwrap();
-        let parquet_path = temp_dir.path().join("llms.parquet");
+        let parquet_path = temp_dir.path().join("benchmarks.parquet");
 
-        let models = vec![make_test_llm_model()];
-        write_llms_parquet(&models, &parquet_path).unwrap();
+        let rows = vec![make_test_aa_row()];
+        write_benchmarks_parquet(&rows, &parquet_path).unwrap();
 
         assert!(parquet_path.exists());
 
         // Verify we can read it back
+        let conn = Connection::open_in_memory().unwrap();
+        let count: i64 = conn
+            .query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM read_parquet('{}')",
+                    parquet_path.to_string_lossy()
+                ),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+
+        // Verify AA columns exist
+        let intelligence: Option<f64> = conn
+            .query_row(
+                &format!(
+                    "SELECT intelligence FROM read_parquet('{}')",
+                    parquet_path.to_string_lossy()
+                ),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(intelligence, Some(55.0));
+    }
+
+    #[test]
+    fn test_write_models_parquet() {
+        let temp_dir = TempDir::new().unwrap();
+        let parquet_path = temp_dir.path().join("models.parquet");
+
+        let rows = vec![ModelsDevRow {
+            provider_id: "openai".to_string(),
+            provider_name: "OpenAI".to_string(),
+            provider_env: Some("OPENAI_API_KEY".to_string()),
+            provider_npm: Some("@ai-sdk/openai".to_string()),
+            provider_api: Some("https://api.openai.com/v1".to_string()),
+            provider_doc: Some("https://platform.openai.com/docs".to_string()),
+            model_id: "gpt-4o".to_string(),
+            model_name: "GPT-4o".to_string(),
+            family: Some("gpt-4".to_string()),
+            attachment: Some(true),
+            reasoning: Some(false),
+            tool_call: Some(true),
+            structured_output: Some(true),
+            temperature: Some(true),
+            knowledge: Some("2024-04".to_string()),
+            release_date: Some("2024-05-13".to_string()),
+            last_updated: Some("2024-11-20".to_string()),
+            open_weights: Some(false),
+            status: None,
+            context_window: Some(128000),
+            max_input_tokens: None,
+            max_output_tokens: Some(16384),
+            cost_input: Some(2.5),
+            cost_output: Some(10.0),
+            cost_cache_read: Some(1.25),
+            cost_cache_write: Some(3.75),
+            input_modalities: Some("text,image".to_string()),
+            output_modalities: Some("text".to_string()),
+        }];
+
+        write_models_parquet(&rows, &parquet_path).unwrap();
+        assert!(parquet_path.exists());
+
         let conn = Connection::open_in_memory().unwrap();
         let count: i64 = conn
             .query_row(
@@ -347,52 +344,5 @@ mod tests {
             )
             .unwrap();
         assert_eq!(tool_call, Some(true));
-    }
-
-    #[test]
-    fn test_write_models_dev_parquet() {
-        let temp_dir = TempDir::new().unwrap();
-        let parquet_path = temp_dir.path().join("models_dev.parquet");
-
-        let rows = vec![ModelsDevRow {
-            provider_id: "openai".to_string(),
-            provider_name: "OpenAI".to_string(),
-            model_id: "gpt-4o".to_string(),
-            model_name: "GPT-4o".to_string(),
-            family: Some("gpt-4".to_string()),
-            attachment: Some(true),
-            reasoning: Some(false),
-            tool_call: Some(true),
-            structured_output: Some(true),
-            temperature: Some(true),
-            knowledge: Some("2024-04".to_string()),
-            release_date: Some("2024-05-13".to_string()),
-            last_updated: Some("2024-11-20".to_string()),
-            open_weights: Some(false),
-            status: None,
-            context_window: Some(128000),
-            max_input_tokens: None,
-            max_output_tokens: Some(16384),
-            cost_input: Some(2.5),
-            cost_output: Some(10.0),
-            input_modalities: Some("text,image".to_string()),
-            output_modalities: Some("text".to_string()),
-        }];
-
-        write_models_dev_parquet(&rows, &parquet_path).unwrap();
-        assert!(parquet_path.exists());
-
-        let conn = Connection::open_in_memory().unwrap();
-        let count: i64 = conn
-            .query_row(
-                &format!(
-                    "SELECT COUNT(*) FROM read_parquet('{}')",
-                    parquet_path.to_string_lossy()
-                ),
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(count, 1);
     }
 }

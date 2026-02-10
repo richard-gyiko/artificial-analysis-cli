@@ -3,6 +3,8 @@
 //! Single source of truth for table schemas, used by both Parquet serialization
 //! and SQL query display.
 
+use crate::sources::MODELS;
+
 /// Column definition.
 #[derive(Debug, Clone, Copy)]
 pub struct Column {
@@ -39,11 +41,14 @@ impl TableDef {
     }
 }
 
-// Merged LLM table schema (user-facing)
-pub const LLMS: TableDef = TableDef {
-    name: "llms",
-    command: "which-llm llms",
-    parquet_file: "llms.parquet",
+/// Benchmarks table schema - contains Artificial Analysis data.
+///
+/// For capability data (tool_call, reasoning, context_window, etc.),
+/// query the `models` table from models.dev.
+pub const BENCHMARKS: TableDef = TableDef {
+    name: "benchmarks",
+    command: "which-llm refresh",
+    parquet_file: "benchmarks.parquet",
     columns: &[
         // Core identity
         Column {
@@ -76,7 +81,7 @@ pub const LLMS: TableDef = TableDef {
             sql_type: "VARCHAR",
             nullable: true,
         },
-        // Benchmarks (AA)
+        // Benchmarks
         Column {
             name: "intelligence",
             sql_type: "DOUBLE",
@@ -127,7 +132,7 @@ pub const LLMS: TableDef = TableDef {
             sql_type: "DOUBLE",
             nullable: true,
         },
-        // Pricing (AA)
+        // Pricing
         Column {
             name: "input_price",
             sql_type: "DOUBLE",
@@ -143,7 +148,7 @@ pub const LLMS: TableDef = TableDef {
             sql_type: "DOUBLE",
             nullable: true,
         },
-        // Performance (AA)
+        // Performance
         Column {
             name: "tps",
             sql_type: "DOUBLE",
@@ -153,81 +158,6 @@ pub const LLMS: TableDef = TableDef {
             name: "latency",
             sql_type: "DOUBLE",
             nullable: true,
-        },
-        // Capabilities (models.dev)
-        Column {
-            name: "reasoning",
-            sql_type: "BOOLEAN",
-            nullable: true,
-        },
-        Column {
-            name: "tool_call",
-            sql_type: "BOOLEAN",
-            nullable: true,
-        },
-        Column {
-            name: "structured_output",
-            sql_type: "BOOLEAN",
-            nullable: true,
-        },
-        Column {
-            name: "attachment",
-            sql_type: "BOOLEAN",
-            nullable: true,
-        },
-        Column {
-            name: "temperature",
-            sql_type: "BOOLEAN",
-            nullable: true,
-        },
-        // Limits (models.dev)
-        Column {
-            name: "context_window",
-            sql_type: "BIGINT",
-            nullable: true,
-        },
-        Column {
-            name: "max_input_tokens",
-            sql_type: "BIGINT",
-            nullable: true,
-        },
-        Column {
-            name: "max_output_tokens",
-            sql_type: "BIGINT",
-            nullable: true,
-        },
-        // Modalities (models.dev, comma-separated)
-        Column {
-            name: "input_modalities",
-            sql_type: "VARCHAR",
-            nullable: true,
-        },
-        Column {
-            name: "output_modalities",
-            sql_type: "VARCHAR",
-            nullable: true,
-        },
-        // Additional metadata (models.dev)
-        Column {
-            name: "knowledge_cutoff",
-            sql_type: "VARCHAR",
-            nullable: true,
-        },
-        Column {
-            name: "open_weights",
-            sql_type: "BOOLEAN",
-            nullable: true,
-        },
-        Column {
-            name: "last_updated",
-            sql_type: "VARCHAR",
-            nullable: true,
-        },
-        // Source tracking
-        Column {
-            name: "models_dev_matched",
-            sql_type: "BOOLEAN",
-            nullable: false,
         },
     ],
 };
@@ -274,42 +204,43 @@ const MEDIA_COLUMNS: &[Column] = &[
 // Individual media table definitions
 pub const TEXT_TO_IMAGE: TableDef = TableDef {
     name: "text_to_image",
-    command: "which-llm text-to-image",
+    command: "which-llm refresh",
     parquet_file: "text_to_image.parquet",
     columns: MEDIA_COLUMNS,
 };
 
 pub const IMAGE_EDITING: TableDef = TableDef {
     name: "image_editing",
-    command: "which-llm image-editing",
+    command: "which-llm refresh",
     parquet_file: "image_editing.parquet",
     columns: MEDIA_COLUMNS,
 };
 
 pub const TEXT_TO_SPEECH: TableDef = TableDef {
     name: "text_to_speech",
-    command: "which-llm text-to-speech",
+    command: "which-llm refresh",
     parquet_file: "text_to_speech.parquet",
     columns: MEDIA_COLUMNS,
 };
 
 pub const TEXT_TO_VIDEO: TableDef = TableDef {
     name: "text_to_video",
-    command: "which-llm text-to-video",
+    command: "which-llm refresh",
     parquet_file: "text_to_video.parquet",
     columns: MEDIA_COLUMNS,
 };
 
 pub const IMAGE_TO_VIDEO: TableDef = TableDef {
     name: "image_to_video",
-    command: "which-llm image-to-video",
+    command: "which-llm refresh",
     parquet_file: "image_to_video.parquet",
     columns: MEDIA_COLUMNS,
 };
 
 /// All available tables (user-facing).
 pub const ALL_TABLES: &[&TableDef] = &[
-    &LLMS,
+    &BENCHMARKS,
+    &MODELS,
     &TEXT_TO_IMAGE,
     &IMAGE_EDITING,
     &TEXT_TO_SPEECH,
@@ -320,7 +251,8 @@ pub const ALL_TABLES: &[&TableDef] = &[
 /// Get table definition by name.
 pub fn get_table_def(name: &str) -> Option<&'static TableDef> {
     match name {
-        "llms" => Some(&LLMS),
+        "benchmarks" => Some(&BENCHMARKS),
+        "models" => Some(&MODELS),
         "text_to_image" => Some(&TEXT_TO_IMAGE),
         "image_editing" => Some(&IMAGE_EDITING),
         "text_to_speech" => Some(&TEXT_TO_SPEECH),
@@ -336,14 +268,15 @@ mod tests {
 
     #[test]
     fn test_create_table_sql() {
-        let sql = LLMS.create_table_sql();
-        assert!(sql.contains("CREATE TABLE llms"));
+        let sql = BENCHMARKS.create_table_sql();
+        assert!(sql.contains("CREATE TABLE benchmarks"));
         assert!(sql.contains("id VARCHAR NOT NULL"));
         assert!(sql.contains("intelligence DOUBLE"));
-        // New capability fields
-        assert!(sql.contains("reasoning BOOLEAN"));
-        assert!(sql.contains("tool_call BOOLEAN"));
-        assert!(sql.contains("context_window BIGINT"));
+        // Verify capability fields are NOT present
+        assert!(!sql.contains("reasoning"));
+        assert!(!sql.contains("tool_call"));
+        assert!(!sql.contains("context_window"));
+        assert!(!sql.contains("models_dev_matched"));
     }
 
     #[test]
@@ -354,28 +287,33 @@ mod tests {
 
     #[test]
     fn test_get_table_def() {
-        assert!(get_table_def("llms").is_some());
+        assert!(get_table_def("benchmarks").is_some());
+        assert!(get_table_def("models").is_some());
         assert!(get_table_def("text_to_image").is_some());
         assert!(get_table_def("unknown").is_none());
     }
 
     #[test]
     fn test_all_tables_count() {
-        assert_eq!(ALL_TABLES.len(), 6);
+        assert_eq!(ALL_TABLES.len(), 7);
     }
 
     #[test]
-    fn test_llms_has_capability_columns() {
-        let llms = get_table_def("llms").unwrap();
-        let column_names: Vec<_> = llms.columns.iter().map(|c| c.name).collect();
+    fn test_benchmarks_has_only_aa_columns() {
+        let benchmarks = get_table_def("benchmarks").unwrap();
+        let column_names: Vec<_> = benchmarks.columns.iter().map(|c| c.name).collect();
 
-        assert!(column_names.contains(&"reasoning"));
-        assert!(column_names.contains(&"tool_call"));
-        assert!(column_names.contains(&"structured_output"));
-        assert!(column_names.contains(&"attachment"));
-        assert!(column_names.contains(&"context_window"));
-        assert!(column_names.contains(&"input_modalities"));
-        assert!(column_names.contains(&"output_modalities"));
-        assert!(column_names.contains(&"models_dev_matched"));
+        // AA columns should be present
+        assert!(column_names.contains(&"intelligence"));
+        assert!(column_names.contains(&"coding"));
+        assert!(column_names.contains(&"tps"));
+        assert!(column_names.contains(&"input_price"));
+
+        // models.dev columns should NOT be present
+        assert!(!column_names.contains(&"reasoning"));
+        assert!(!column_names.contains(&"tool_call"));
+        assert!(!column_names.contains(&"structured_output"));
+        assert!(!column_names.contains(&"context_window"));
+        assert!(!column_names.contains(&"models_dev_matched"));
     }
 }

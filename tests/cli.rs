@@ -66,37 +66,14 @@ fn test_cache_status() {
 }
 
 #[test]
-fn test_llms_api_mode_requires_api_key() {
+fn test_refresh_api_mode_requires_api_key() {
     let temp = tempfile::tempdir().unwrap();
     cmd_with_temp_config(&temp)
-        .arg("llms")
+        .arg("refresh")
         .arg("--use-api")
         .assert()
         .failure()
         .stderr(predicate::str::contains("No API key configured"));
-}
-
-#[test]
-#[ignore] // Requires network access to GitHub releases, can be flaky in CI
-fn test_llms_hosted_data_works() {
-    // When hosted data is available, CLI should fetch from hosted source successfully
-    let temp = tempfile::tempdir().unwrap();
-    cmd_with_temp_config(&temp)
-        .arg("llms")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Name"));
-}
-
-#[test]
-fn test_output_format_flags() {
-    let temp = tempfile::tempdir().unwrap();
-    cmd_with_temp_config(&temp)
-        .arg("--json")
-        .arg("--csv")
-        .arg("llms")
-        .assert()
-        .failure();
 }
 
 #[test]
@@ -106,20 +83,18 @@ fn test_query_help() {
         .arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("SQL"))
-        .stdout(predicate::str::contains("--tables"));
+        .stdout(predicate::str::contains("SQL"));
 }
 
 #[test]
-fn test_query_tables() {
+fn test_tables_command() {
     let temp = tempfile::tempdir().unwrap();
     cmd_with_temp_config(&temp)
-        .arg("query")
-        .arg("--tables")
+        .arg("tables")
         .assert()
         .success()
         .stdout(predicate::str::contains("Available tables"))
-        .stdout(predicate::str::contains("llms"))
+        .stdout(predicate::str::contains("benchmarks"))
         .stdout(predicate::str::contains("text_to_image"))
         .stdout(predicate::str::contains("not cached"));
 }
@@ -139,9 +114,9 @@ fn test_query_missing_table() {
     let temp = tempfile::tempdir().unwrap();
     cmd_with_temp_config(&temp)
         .arg("query")
-        .arg("SELECT * FROM llms")
+        .arg("SELECT * FROM benchmarks")
         .assert()
         .failure()
         .stderr(predicate::str::contains("not found"))
-        .stderr(predicate::str::contains("which-llm llms"));
+        .stderr(predicate::str::contains("which-llm refresh"));
 }

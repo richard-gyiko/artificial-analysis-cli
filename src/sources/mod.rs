@@ -9,3 +9,4 @@ pub mod models_dev;
 
 pub use artificial_analysis::AaClient;
 pub use models_dev::ModelsDevClient;
+pub use models_dev::MODELS;

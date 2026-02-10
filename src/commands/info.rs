@@ -33,7 +33,7 @@ pub fn run() -> Result<()> {
         println!("  Status: Fresh (within 24h TTL)");
     } else {
         println!("  Type: Not yet fetched");
-        println!("  Run 'which-llm llms' to fetch data");
+        println!("  Run 'which-llm refresh' to fetch data");
     }
 
     println!();

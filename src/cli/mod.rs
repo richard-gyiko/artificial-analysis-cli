@@ -1,6 +1,5 @@
 //! CLI argument definitions.
 
-use crate::output::OutputFormat;
 use clap::{Parser, Subcommand};
 
 /// which-llm - Query AI model benchmarks from the terminal.
@@ -14,92 +13,46 @@ pub struct Cli {
     #[arg(long, short = 'p', global = true)]
     pub profile: Option<String>,
 
-    /// Output as JSON
-    #[arg(long, global = true, conflicts_with_all = ["csv", "table", "plain"])]
-    pub json: bool,
-
-    /// Output as CSV
-    #[arg(long, global = true, conflicts_with_all = ["json", "table", "plain"])]
-    pub csv: bool,
-
-    /// Output as ASCII table
-    #[arg(long, global = true, conflicts_with_all = ["json", "csv", "plain"])]
-    pub table: bool,
-
-    /// Output as plain text (tab-separated)
-    #[arg(long, global = true, conflicts_with_all = ["json", "csv", "table"])]
-    pub plain: bool,
-
-    /// Bypass cache and fetch fresh data
-    #[arg(long, global = true)]
-    pub refresh: bool,
-
     /// Use direct API access instead of hosted data (requires API key)
     #[arg(long, global = true)]
     pub use_api: bool,
 
-    /// Suppress attribution notice (for scripting)
+    /// Suppress output messages (for scripting)
     #[arg(long, short = 'q', global = true)]
     pub quiet: bool,
 }
 
-impl Cli {
-    /// Get the selected output format.
-    pub fn output_format(&self) -> OutputFormat {
-        if self.json {
-            OutputFormat::Json
-        } else if self.csv {
-            OutputFormat::Csv
-        } else if self.table {
-            OutputFormat::Table
-        } else if self.plain {
-            OutputFormat::Plain
-        } else {
-            OutputFormat::Markdown
-        }
-    }
-}
-
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// List and query LLM models
-    Llms {
-        /// Filter by model slug
-        #[arg(long, short = 'm')]
-        model: Option<String>,
+    /// Execute SQL queries against cached data
+    Query {
+        /// SQL query to execute (e.g., "SELECT * FROM benchmarks WHERE intelligence > 40")
+        sql: Option<String>,
 
-        /// Filter by creator slug
-        #[arg(long, short = 'c')]
-        creator: Option<String>,
+        /// Output as JSON
+        #[arg(long, conflicts_with_all = ["csv", "table", "plain"])]
+        json: bool,
 
-        /// Sort by field (intelligence, price, speed, context)
-        #[arg(long, short = 's')]
-        sort: Option<String>,
+        /// Output as CSV
+        #[arg(long, conflicts_with_all = ["json", "table", "plain"])]
+        csv: bool,
 
-        // Capability filters
-        /// Filter by reasoning support (chain-of-thought models)
-        #[arg(long)]
-        reasoning: bool,
+        /// Output as ASCII table
+        #[arg(long, conflicts_with_all = ["json", "csv", "plain"])]
+        table: bool,
 
-        /// Filter by tool/function calling support
-        #[arg(long)]
-        tool_call: bool,
+        /// Output as plain text (tab-separated)
+        #[arg(long, conflicts_with_all = ["json", "csv", "table"])]
+        plain: bool,
+    },
 
-        /// Filter by structured JSON output support
-        #[arg(long)]
-        structured_output: bool,
+    /// Refresh all cached data from sources
+    Refresh,
 
-        /// Filter by file attachment support
-        #[arg(long)]
-        attachment: bool,
-
-        /// Filter by minimum context window (tokens)
-        #[arg(long)]
-        min_context: Option<u64>,
-
-        /// Filter by modality (e.g., "input:image", "output:text")
-        #[arg(long)]
-        modality: Option<String>,
+    /// List available tables and their schemas
+    Tables {
+        /// Show details for a specific table
+        table: Option<String>,
     },
 
     /// Compare multiple models side by side
@@ -111,6 +64,22 @@ pub enum Commands {
         /// Show all available fields
         #[arg(long, short = 'v')]
         verbose: bool,
+
+        /// Output as JSON
+        #[arg(long, conflicts_with_all = ["csv", "table", "plain"])]
+        json: bool,
+
+        /// Output as CSV
+        #[arg(long, conflicts_with_all = ["json", "table", "plain"])]
+        csv: bool,
+
+        /// Output as ASCII table
+        #[arg(long, conflicts_with_all = ["json", "csv", "plain"])]
+        table: bool,
+
+        /// Output as plain text (tab-separated)
+        #[arg(long, conflicts_with_all = ["json", "csv", "table"])]
+        plain: bool,
     },
 
     /// Calculate token costs for models
@@ -134,43 +103,22 @@ pub enum Commands {
         /// Time period for cost projection: once (single calculation), daily, or monthly (30 days)
         #[arg(long, default_value = "once")]
         period: String,
-    },
 
-    /// List text-to-image model rankings
-    TextToImage {
-        /// Include category breakdown
-        #[arg(long)]
-        categories: bool,
-    },
+        /// Output as JSON
+        #[arg(long, conflicts_with_all = ["csv", "table", "plain"])]
+        json: bool,
 
-    /// List image editing model rankings
-    ImageEditing,
+        /// Output as CSV
+        #[arg(long, conflicts_with_all = ["json", "table", "plain"])]
+        csv: bool,
 
-    /// List text-to-speech model rankings
-    TextToSpeech,
+        /// Output as ASCII table
+        #[arg(long, conflicts_with_all = ["json", "csv", "plain"])]
+        table: bool,
 
-    /// List text-to-video model rankings
-    TextToVideo {
-        /// Include category breakdown
-        #[arg(long)]
-        categories: bool,
-    },
-
-    /// List image-to-video model rankings
-    ImageToVideo {
-        /// Include category breakdown
-        #[arg(long)]
-        categories: bool,
-    },
-
-    /// Execute SQL queries against cached data
-    Query {
-        /// SQL query to execute (e.g., "SELECT * FROM llms WHERE intelligence > 40")
-        sql: Option<String>,
-
-        /// List available tables and their schemas
-        #[arg(long)]
-        tables: bool,
+        /// Output as plain text (tab-separated)
+        #[arg(long, conflicts_with_all = ["json", "csv", "table"])]
+        plain: bool,
     },
 
     /// Show data source information and attribution
@@ -193,6 +141,26 @@ pub enum Commands {
         #[command(subcommand)]
         command: SkillCommands,
     },
+}
+
+/// Get output format from command-specific flags.
+pub fn get_output_format(
+    json: bool,
+    csv: bool,
+    table: bool,
+    plain: bool,
+) -> crate::output::OutputFormat {
+    if json {
+        crate::output::OutputFormat::Json
+    } else if csv {
+        crate::output::OutputFormat::Csv
+    } else if table {
+        crate::output::OutputFormat::Table
+    } else if plain {
+        crate::output::OutputFormat::Plain
+    } else {
+        crate::output::OutputFormat::Markdown
+    }
 }
 
 #[derive(Subcommand, Debug)]

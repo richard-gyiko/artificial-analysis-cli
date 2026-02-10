@@ -196,9 +196,8 @@ impl RemoteDataClient {
     pub async fn fetch_all_data(&self, force_refresh: bool) -> Result<()> {
         // Files to fetch
         let files = [
-            "llms",
-            "aa_llms",
-            "models_dev",
+            "benchmarks",
+            "models",
             "text_to_image",
             "image_editing",
             "text_to_speech",

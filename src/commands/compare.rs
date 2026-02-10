@@ -26,12 +26,10 @@ struct CompareResult {
 /// Field type for determining winner logic.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum FieldType {
-    /// Higher is better (intelligence, tps, context)
+    /// Higher is better (intelligence, tps, coding)
     HigherBetter,
-    /// Lower is better (price)
+    /// Lower is better (price, latency)
     LowerBetter,
-    /// Boolean capability (true is better)
-    Boolean,
     /// No winner comparison (creator, etc.)
     NoWinner,
 }
@@ -50,8 +48,6 @@ struct FieldDef {
 #[derive(Debug, Clone)]
 enum FieldValue {
     Float(f64),
-    Int(u64),
-    Bool(Option<bool>),
     String(String),
 }
 
@@ -59,23 +55,8 @@ impl FieldValue {
     fn to_display(&self) -> String {
         match self {
             FieldValue::Float(v) => format!("{:.1}", v),
-            FieldValue::Int(v) => format_context(*v),
-            FieldValue::Bool(Some(true)) => "+".to_string(),
-            FieldValue::Bool(Some(false)) => "-".to_string(),
-            FieldValue::Bool(None) => "?".to_string(),
             FieldValue::String(s) => s.clone(),
         }
-    }
-}
-
-/// Format context window for display.
-fn format_context(value: u64) -> String {
-    if value >= 1_000_000 {
-        format!("{}M", value / 1_000_000)
-    } else if value >= 1_000 {
-        format!("{}K", value / 1_000)
-    } else {
-        value.to_string()
     }
 }
 
@@ -127,29 +108,13 @@ fn get_field_defs(verbose: bool) -> Vec<FieldDef> {
             extractor: Box::new(|m| m.tps.map(FieldValue::Float)),
         },
         FieldDef {
-            name: "Context",
-            field_type: FieldType::HigherBetter,
-            extractor: Box::new(|m| m.context_window.map(FieldValue::Int)),
-        },
-        // Capabilities
-        FieldDef {
-            name: "Reasoning",
-            field_type: FieldType::Boolean,
-            extractor: Box::new(|m| Some(FieldValue::Bool(m.reasoning))),
-        },
-        FieldDef {
-            name: "Tool Call",
-            field_type: FieldType::Boolean,
-            extractor: Box::new(|m| Some(FieldValue::Bool(m.tool_call))),
-        },
-        FieldDef {
-            name: "Structured Output",
-            field_type: FieldType::Boolean,
-            extractor: Box::new(|m| Some(FieldValue::Bool(m.structured_output))),
+            name: "Latency (s)",
+            field_type: FieldType::LowerBetter,
+            extractor: Box::new(|m| m.latency.map(FieldValue::Float)),
         },
     ];
 
-    // Verbose-only fields
+    // Verbose-only fields (additional AA benchmarks)
     if verbose {
         fields.extend(vec![
             FieldDef {
@@ -178,24 +143,19 @@ fn get_field_defs(verbose: bool) -> Vec<FieldDef> {
                 extractor: Box::new(|m| m.livecodebench.map(FieldValue::Float)),
             },
             FieldDef {
-                name: "Latency (s)",
-                field_type: FieldType::LowerBetter,
-                extractor: Box::new(|m| m.latency.map(FieldValue::Float)),
+                name: "SciCode",
+                field_type: FieldType::HigherBetter,
+                extractor: Box::new(|m| m.scicode.map(FieldValue::Float)),
             },
             FieldDef {
-                name: "Attachment",
-                field_type: FieldType::Boolean,
-                extractor: Box::new(|m| Some(FieldValue::Bool(m.attachment))),
+                name: "Math 500",
+                field_type: FieldType::HigherBetter,
+                extractor: Box::new(|m| m.math_500.map(FieldValue::Float)),
             },
             FieldDef {
-                name: "Knowledge Cutoff",
-                field_type: FieldType::NoWinner,
-                extractor: Box::new(|m| m.knowledge_cutoff.clone().map(FieldValue::String)),
-            },
-            FieldDef {
-                name: "Open Weights",
-                field_type: FieldType::Boolean,
-                extractor: Box::new(|m| Some(FieldValue::Bool(m.open_weights))),
+                name: "AIME",
+                field_type: FieldType::HigherBetter,
+                extractor: Box::new(|m| m.aime.map(FieldValue::Float)),
             },
         ]);
     }
@@ -207,22 +167,11 @@ fn get_field_defs(verbose: bool) -> Vec<FieldDef> {
 fn find_winners(values: &[Option<FieldValue>], field_type: FieldType) -> Vec<bool> {
     match field_type {
         FieldType::NoWinner => vec![false; values.len()],
-        FieldType::Boolean => {
-            // Winners are those with Some(true)
-            let has_true = values
-                .iter()
-                .any(|v| matches!(v, Some(FieldValue::Bool(Some(true)))));
-            values
-                .iter()
-                .map(|v| has_true && matches!(v, Some(FieldValue::Bool(Some(true)))))
-                .collect()
-        }
         FieldType::HigherBetter => {
             let floats: Vec<Option<f64>> = values
                 .iter()
                 .map(|v| match v {
                     Some(FieldValue::Float(f)) => Some(*f),
-                    Some(FieldValue::Int(i)) => Some(*i as f64),
                     _ => None,
                 })
                 .collect();
@@ -246,7 +195,6 @@ fn find_winners(values: &[Option<FieldValue>], field_type: FieldType) -> Vec<boo
                 .iter()
                 .map(|v| match v {
                     Some(FieldValue::Float(f)) => Some(*f),
-                    Some(FieldValue::Int(i)) => Some(*i as f64),
                     _ => None,
                 })
                 .collect();
