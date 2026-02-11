@@ -28,13 +28,14 @@ jobs:
           set -euo pipefail
           
           # Try to download the latest CLI release
+          mkdir -p /tmp/which-llm-bin
           if gh release download --repo ${{ github.repository }} \
               --pattern 'which-llm-x86_64-unknown-linux-gnu.tar.gz' \
-              --dir /tmp; then
+              --dir /tmp/which-llm-bin; then
             echo "Downloaded CLI from release"
-            tar -xzf /tmp/which-llm-*.tar.gz -C /tmp
-            chmod +x /tmp/which-llm
-            echo "cli_path=/tmp/which-llm" >> $GITHUB_OUTPUT
+            tar -xzf /tmp/which-llm-bin/which-llm-*.tar.gz -C /tmp/which-llm-bin --no-same-owner
+            chmod +x /tmp/which-llm-bin/which-llm
+            echo "cli_path=/tmp/which-llm-bin/which-llm" >> $GITHUB_OUTPUT
             echo "need_build=false" >> $GITHUB_OUTPUT
           else
             echo "No release found, will build from source"
@@ -70,7 +71,7 @@ jobs:
           if [ "${{ steps.download.outputs.need_build }}" == "true" ]; then
             CLI="./target/release/which-llm"
           else
-            CLI="/tmp/which-llm"
+            CLI="/tmp/which-llm-bin/which-llm"
           fi
           
           # Fetch all data using the refresh command with API access
